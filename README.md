@@ -2,213 +2,383 @@
 
 Creator: I
 
-Firmware berbasis Arduino/STM32 untuk alat analisis kualitas air dengan tampilan OLED, sensor suhu DS18B20, sensor TDS analog, dan sensor turbidity analog. Proyek ini dibuat dengan arsitektur multitask berbasis FreeRTOS dan berjalan pada board STM32F401CCU6 (Blackpill).
+Firmware berbasis Arduino/STM32 untuk alat analisis kualitas air terpadu dengan tampilan OLED 128x64, sensor suhu DS18B20, sensor TDS analog, sensor turbidity analog, serta **Sistem Klasifikasi Kualitas Air berbasis Fuzzy Logic Sugeno Order-0** dan **Penyimpanan Kalibrasi EEPROM Flash STM32**. Proyek ini dibuat dengan arsitektur *multitask preemptive* berbasis **STM32FreeRTOS** dan berjalan pada board **STM32F401CCU6 (Blackpill)**.
+
+---
 
 ## 1. Deskripsi Proyek
 
-Proyek ini adalah firmware untuk perangkat pengukur kualitas air yang menampilkan hasil pengukuran pada layar OLED 128x64. Sistem membaca data dari beberapa sensor secara periodik, menyimpannya dalam struktur data global, dan menampilkannya melalui antarmuka GUI.
+Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-parameter yang menampilkan hasil pengukuran dan evaluasi kualitas air secara *real-time* pada layar OLED 128x64. Sistem membaca data dari beberapa sensor secara periodik, melakukan kompensasi suhu terhadap pembacaan TDS, mengolah data melalui **Mesin Evaluasi Fuzzy Sugeno**, menyimpannya secara *thread-safe* di dalam struktur data global, dan menampilkannya melalui antarmuka GUI **Dual-Page View**.
 
-Tujuan utama dari firmware ini:
-- membaca suhu air menggunakan DS18B20,
-- membaca nilai TDS analog,
-- membaca nilai turbidity analog,
-- menampilkan hasil secara real-time di OLED,
-- menyediakan navigasi menu sederhana menggunakan tombol,
-- mendukung kalibrasi dan pengaturan perangkat.
+### Tujuan Utama Firmware:
+- Membaca suhu air menggunakan sensor digital **DS18B20** (OneWire).
+- Membaca nilai **TDS analog** dan menerapkan **kompensasi suhu** (referensi 25 °C).
+- Membaca nilai **turbidity analog** (kekeruhan air) dengan filter *Circular Moving Average* (20 sampel).
+- Menghitung **Skor Kualitas Air (0–100)** dan menetapkan label status (`LAYAK`, `LTM`, `TL`) serta pesan rekomendasi menggunakan **Fuzzy Logic Sugeno Order-0**.
+- Menampilkan hasil secara *real-time* di OLED 128x64 dengan fitur **Dual-Page View** pada layar Pengukuran.
+- Menyediakan **Fitur Kalibrasi Sensor Interaktif** (TDS, Turbidity, Suhu) dengan penyimpanan permanen pada memori Flash EEPROM STM32.
+- Menyediakan navigasi menu yang intuitif dan aman menggunakan 6 tombol fisik.
+- Mendukung pengaturan kecerahan/kontras layar.
 
-## 2. Spesifikasi Hardware
+---
 
-### Board utama
-- STM32F401CCU6 (Blackpill)
-- Framework: STM32duino (Arduino Core STM32)
-- RTOS: STM32FreeRTOS
+## 2. Spesifikasi Hardware & Software
 
-### Sensor yang didukung
-- DS18B20 untuk pengukuran suhu
-- Sensor TDS analog (DFRobot / analog)
-- Sensor turbidity analog (SEN0189)
+### Board Utama
+- **MCU**: STM32F401CCU6 (Blackpill ARM Cortex-M4, 84 MHz, 64 KB SRAM, 256 KB Flash)
+- **Framework**: STM32duino (Arduino Core STM32)
+- **RTOS**: STM32FreeRTOS
 
-### Display
-- OLED SSD1306 128x64 dengan komunikasi I2C
+### Sensor yang Didukung
+- **Suhu**: DS18B20 Digital Waterproof (OneWire Bus pada `PB_10`, resolusi 12-bit)
+- **TDS**: Sensor TDS Analog DFRobot (ADC CH0 pada `PA_0`, 12-bit)
+- **Turbidity**: Sensor Turbidity Analog SEN0189 (ADC CH1 pada `PA_1`, 12-bit)
 
-### Input
-- 6 tombol navigasi:
-  - UP
-  - DOWN
-  - LEFT
-  - RIGHT
-  - OK
-  - BACK
+### Display & Input
+- **Display**: OLED SSD1306 128x64 dengan komunikasi Hardware I2C (`PB_8` SCL, `PB_9` SDA)
+- **Input**: 6 Tombol Navigasi (`UP`, `DOWN`, `LEFT`, `RIGHT`, `OK`, `BACK`)
+
+---
 
 ## 3. Diagram Ringkas Sistem
 
 ```text
-[STM32F401CCU6]
-   |-- UART Serial1 debug
-   |-- I2C -> OLED SSD1306
-   |-- OneWire -> DS18B20
-   |-- ADC CH0 -> TDS Analog
-   |-- ADC CH1 -> Turbidity Analog
-   |-- GPIO -> 6 tombol
+[STM32F401CCU6 (Blackpill)]
+   |-- EEPROM Flash Memory -> Penyimpanan Permanen Parameter Kalibrasi
+   |-- UART Serial1 (PA_9 RX / PA_10 TX) -> Telemetri & Log Validasi (115200 baud)
+   |-- I2C (PB_8 SCL / PB_9 SDA) -> OLED SSD1306 128x64
+   |-- OneWire (PB_10) -> DS18B20 Temp Sensor
+   |-- ADC CH0 (PA_0) -> TDS Analog Sensor
+   |-- ADC CH1 (PA_1) -> Turbidity Analog Sensor
+   |-- GPIO Input -> 6 Tombol Navigasi (Active LOW, Internal Pull-Up)
 ```
+
+---
 
 ## 4. Struktur File Proyek
 
-- `main.ino` – entry point firmware, inisialisasi modul, lalu menjalankan scheduler FreeRTOS.
-- `config.h` – konfigurasi pin, timing task, prioritas, stack size, dan parameter umum.
-- `globals.h` / `globals.cpp` – variabel global, mutex, queue, dan struktur data sistem.
-- `buttons.h` / `buttons.cpp` – pembacaan tombol, debounce, hold, repeat, dan event queue.
-- `display.h` / `display.cpp` – driver OLED SSD1306 dan fungsi rendering header/status bar.
-- `sensors.h` / `sensors.cpp` – driver sensor, filter moving average, dan pembacaan ADC.
-- `gui.h` / `gui.cpp` – antarmuka GUI berbasis state machine.
-- `tasks.h` / `tasks.cpp` – pembuatan seluruh task FreeRTOS.
+- `main.ino` – Entry point firmware, inisialisasi hardware/software, pengujian otomatis validasi baseline MATLAB, dan inisiasi FreeRTOS scheduler.
+- `config.h` – Single source of truth untuk konfigurasi pin, timing task, prioritas, stack size, dan parameter umum.
+- `globals.h` / `globals.cpp` – Variabel state global, mutex data (`g_dataMutex`), queue tombol (`g_buttonEventQueue`), dan struct `SensorData` & `SystemState`.
+- `storage.h` / `storage.cpp` – Modul penyimpanan non-volatile Flash **EEPROM Emulation** untuk parameter kalibrasi ($K$-factor TDS, $V_{\text{clear}}$ Turbidity, Offset Suhu).
+- `fuzzy_kualitas_air.h` / `fuzzy_kualitas_air.c` – Engine evaluasi **Fuzzy Logic Sugeno Order-0**, kompensasi suhu TDS, 9 rule base, dan klasifikasi status kualitas air.
+- `buttons.h` / `buttons.cpp` – Driver tombol dengan software debounce (30ms), hold (600ms), repeat (150ms), dan event queue.
+- `sensors.h` / `sensors.cpp` – Driver sensor DS18B20 non-blocking, pembacaan ADC, filter moving average, penerapan kalibrasi, dan pemrosesan fuzzy thread-safe.
+- `display.h` / `display.cpp` – Driver OLED SSD1306 U8g2 full frame buffer dan primitif header/status bar.
+- `gui.h` / `gui.cpp` – Antarmuka GUI berbasis Finite State Machine (FSM) dengan fitur **Dual-Page View** pada layar Pengukuran dan menu kalibrasi interaktif.
+- `tasks.h` / `tasks.cpp` – Pembuatan dan penanganan 6 task FreeRTOS.
+- `kualitas_air.fis` – File ekspor konfigurasi Fuzzy Inference System dari MATLAB.
 
-## 5. Konfigurasi Pin
+---
 
-Pin mapping yang digunakan dalam proyek ini adalah:
+## 5. Konfigurasi Pin Mapping
 
-| Fungsi | Pin |
-|---|---|
-| UART RX | PA_9 |
-| UART TX | PA_10 |
-| OLED SCL | PB_8 |
-| OLED SDA | PB_9 |
-| DS18B20 Data | PB_10 |
-| TDS Analog | PA_0 |
-| Turbidity Analog | PA_1 |
-| BTN UP | PB_12 |
-| BTN DOWN | PB_13 |
-| BTN LEFT | PB_14 |
-| BTN RIGHT | PB_15 |
-| BTN OK | PA_8 |
-| BTN BACK | PB_11 |
+| Fungsi | Pin MCU | Catatan Hardware |
+|---|---|---|
+| **UART RX** | `PA_9` | FTDI TX -> MCU RX |
+| **UART TX** | `PA_10` | FTDI RX -> MCU TX |
+| **OLED SCL** | `PB_8` | Hardware I2C SCL |
+| **OLED SDA** | `PB_9` | Hardware I2C SDA |
+| **DS18B20 Data** | `PB_10` | OneWire Data (Pull-up 4.7kΩ) |
+| **TDS Analog** | `PA_0` | ADC Channel 0 (12-bit) |
+| **Turbidity Analog** | `PA_1` | ADC Channel 1 (12-bit) |
+| **BTN UP** | `PB_12` | Active LOW (`INPUT_PULLUP`) |
+| **BTN DOWN** | `PB_13` | Active LOW (`INPUT_PULLUP`) |
+| **BTN LEFT** | `PB_14` | Active LOW (`INPUT_PULLUP`) |
+| **BTN RIGHT** | `PB_15` | Active LOW (`INPUT_PULLUP`) |
+| **BTN OK** | `PA_8` | Active LOW (`INPUT_PULLUP`) |
+| **BTN BACK** | `PB_11` | Active LOW (`INPUT_PULLUP`) |
+
+---
 
 ## 6. Library yang Diperlukan
 
-Install library berikut melalui Arduino Library Manager atau dependency manager yang sesuai:
+Pasang library berikut melalui **Arduino Library Manager**:
 
 - `STM32duino FreeRTOS`
 - `U8g2`
 - `OneWire`
 - `DallasTemperature`
 
-## 7. Persiapan Pengembangan
+---
 
-### 7.1 Alat yang diperlukan
-- Arduino IDE atau VS Code + Arduino extension
-- Board package STM32duino
-- Programmer / USB serial yang kompatibel dengan Blackpill
-- Kabel FTDI atau koneksi UART untuk debugging serial
+## 7. Arsitektur Multitasking FreeRTOS
 
-### 7.2 Board yang harus dipilih
-Pada Arduino IDE / STM32duino, pilih board:
+Firmware menggunakan arsitektur *preemptive multitasking* dengan 6 task independen:
 
-- `Generic STM32F4 series`
-- `BlackPill F401CC`
+1. **TaskButton** (Periode: 15 ms | Prioritas: 4): Scan GPIO tombol, debounce, dan melempar event ke `g_buttonEventQueue`.
+2. **TaskGui** (Periode: 50 ms | Prioritas: 3): Mengonsumsi event tombol dan meng-update FSM state GUI.
+3. **TaskOled** (Periode: 100 ms | Prioritas: 2): Menggambar ulang layar OLED via U8g2 hanya saat `displayDirty == true`.
+4. **TaskWater** (Periode: 200 ms | Prioritas: 2): Sampling ADC TDS & Turbidity, moving average filter, dan eksekusi Fuzzy Logic Engine.
+5. **TaskTemp** (Periode: 1000 ms | Prioritas: 1): Konversi DS18B20 non-blocking (menunggu 750ms secara kooperatif).
+6. **TaskDebug** (Periode: 1000 ms | Prioritas: 1): Mengirim log telemetri sistem dan pembacaan sensor ke UART `Serial1` (115200 baud).
 
-### 7.3 Kecepatan serial
-- Baud rate default: `115200`
+---
 
-## 8. Cara Build dan Upload
+## 8. Fitur Klasifikasi Kualitas Air (Fuzzy Sugeno)
 
-1. Buka folder proyek ini pada Arduino IDE atau editor yang mendukung proyek Arduino.
-2. Pastikan board dan port serial sudah benar.
-3. Pastikan semua library yang dibutuhkan sudah terpasang.
-4. Compile proyek.
-5. Upload firmware ke board STM32.
-6. Setelah boot, perangkat akan menampilkan splash screen dan masuk ke menu GUI.
+Sistem evaluasi menggunakan **Fuzzy Inference System (FIS) Sugeno Order-0**:
 
-## 9. Arsitektur Firmware
+### Input Fuzzy:
+1. **TDS Kompensasi (ppm)**: MF Rendah ($0-300$), Sedang ($0-1000$), Tinggi ($300-1200$).
+2. **Turbidity (NTU)**: MF Rendah ($0-5$), Sedang ($0-25$), Tinggi ($5-30$).
 
-Firmware ini memiliki pola multitasking yang jelas:
+### Evaluasi & Label Output:
+- Evaluasi 9 Aturan (Rule Base AND = MIN).
+- Defuzzifikasi *Weighted Average* menghasilkan **Skor Kualitas Air (0–100)**.
+- **Pengelompokan Label Status**:
+  - **Skor $\ge 75.0$** $\rightarrow$ **LAYAK** (`"Air Aman"`)
+  - **$25.0 \le \text{Skor} < 75.0$** $\rightarrow$ **LTM** (Layak Tidak Memenuhi - `"Ganti Filter/Endapkan Sedimen"`)
+  - **Skor $< 25.0$** $\rightarrow$ **TL** (Tidak Layak - `"Bahaya/Dilarang Digunakan"`)
 
-- `Button Task` membaca dan memproses tombol dengan debounce dan event repeat.
-- `Temperature Task` menangani pembacaan suhu DS18B20.
-- `Water Sensor Task` membaca TDS dan turbidity secara periodik.
-- `GUI Task` memproses state menu dan event tombol.
-- `OLED Task` menggambar layar sesuai state terbaru.
-- `Serial Debug Task` menyiapkan output debug melalui UART.
+---
 
-Setiap task berkomunikasi melalui mutex dan queue untuk menjaga data tetap konsisten.
+## 9. Antarmuka GUI & Katalog Tampilan Layar OLED (128x64)
 
-## 10. Fitur Utama
+Layar OLED dibagi menjadi 3 zona horizontal: Header (Atas 12px), Konten Utama (Tengah 44px), dan Status Bar (Bawah 8px).
 
-- Tampilan OLED 128x64 dengan header dan status bar.
-- GUI berbasis FSM (Finite State Machine).
-- Sensor suhu DS18B20 dengan konversi non-blocking.
-- Pembacaan analog TDS dan turbidity dengan moving average filter.
-- Deteksi status sensor: `OK` atau `ERROR`.
-- Menu pengaturan brightness/contrast.
-- Mode kalibrasi untuk sensor.
-- Navigasi tombol yang responsif.
+### 9.1. Splash Screen (Tampilan Booting)
+Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
+```text
++---------------------------------------------------+
+|                                                   |
+|                 Water Quality                     |
+|                   Analyzer                        |
+|                    v1.0.0                         |
+|                                                   |
++---------------------------------------------------+
+```
 
-## 11. Cara Penggunaan
+---
 
-### Menu utama
-- Gunakan tombol navigasi untuk berpindah halaman.
-- Tombol `OK` biasanya digunakan untuk konfirmasi atau masuk ke submenu.
-- Tombol `BACK` digunakan untuk kembali ke halaman sebelumnya.
+### 9.2. Menu Utama (HOME)
+Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih.
+```text
++---------------------------------------------------+
+| Home                                              |
++---------------------------------------------------+
+| > Mulai Pengukuran                                |
+|   Parameter                                       |
+|   Kalibrasi                                       |
+|   Pengaturan                                      |
++---------------------------------------------------+
+| Water Quality Analyzer                            |
++---------------------------------------------------+
+```
 
-### Pengukuran
-- Setelah boot, perangkat akan menampilkan layar utama.
-- Firmware membaca sensor secara periodik dan memperbarui data layar.
+---
 
-### Kalibrasi
-- Akses menu kalibrasi melalui menu GUI.
-- Lakukan kalibrasi sensor sesuai kebutuhan pengujian air.
-- Pastikan sensor dalam kondisi stabil saat kalibrasi.
+### 9.3. Layar Pengukuran - Dual-Page View
+Menampilkan hasil pengolahan data sensor dan Fuzzy Logic secara *real-time*. Tekan `OK` untuk berpindah halaman.
 
-## 12. Catatan Teknis
+#### Page 1: Data Sensor & Skor Fuzzy (Default)
+```text
++---------------------------------------------------+
+| Pengukuran (1/2)                                  |
++---------------------------------------------------+
+| Suhu : 27.5 C (Normal)                            |
+| TDS  : 343.1 ppm                                  |
+| Turb : 10.0 NTU                                   |
+| Skor : 32.8 [LTM]                                 |
++---------------------------------------------------+
+| Tekan OK untuk detail                             |
++---------------------------------------------------+
+```
 
-### Filter moving average
-TDS dan turbidity menggunakan buffer circular moving average dengan jumlah sampel tetap. Ini digunakan untuk meredam noise ADC dan menghasilkan pembacaan yang lebih stabil.
+#### Page 2: Detail Fuzzy & Pesan Rekomendasi (Setelah Tekan OK)
+```text
++---------------------------------------------------+
+| Detail Fuzzy (2/2)                                |
++---------------------------------------------------+
+| Status: LTM (Layak TM)                            |
+| Suhu  : Normal                                    |
+| Pesan :                                           |
+|   Ganti Filter/Endapkan Sedimen                   |
++---------------------------------------------------+
+| Tekan OK ke data sensor                           |
++---------------------------------------------------+
+```
 
-### Keamanan thread / data consistency
-Semua akses terhadap data sensor dan state sistem dilindungi oleh mutex `g_dataMutex` agar tidak terjadi race condition antar task.
+---
 
-### Scheduler FreeRTOS
-Setelah `vTaskStartScheduler()` dipanggil, `loop()` tidak lagi dipakai. Semua eksekusi berjalan di dalam task FreeRTOS.
+### 9.4. Menu Parameter Air (PARAMETER)
+Digunakan untuk memilih standar peruntukan air yang diuji.
+```text
++---------------------------------------------------+
+| Parameter                                         |
++---------------------------------------------------+
+| > Higiene Sanitasi                                |
+|   Air SPA                                         |
+|   Air Kolam Renang                                |
+|   Pemandian Umum                                  |
++---------------------------------------------------+
+| Higiene Sanitasi                                  |
++---------------------------------------------------+
+```
 
-## 13. Troubleshooting
+---
 
-### OLED tidak tampil
-- Periksa koneksi I2C.
-- Pastikan pin `PB_8` dan `PB_9` terhubung dengan benar.
-- Cek apakah library `U8g2` sudah terinstall.
+### 9.5. Menu Kalibrasi Interaktif & Sub-menu (CALIBRATION)
+Digunakan untuk mengkalibrasi sensor TDS, Turbidity, dan Suhu secara interaktif.
 
-### Sensor suhu tidak terbaca
-- Periksa kabel OneWire.
-- Pastikan pin `PB_10` terhubung dengan benar.
-- Cek pull-up dan alamat sensor DS18B20.
+#### Menu Pilihan Kalibrasi:
+```text
++---------------------------------------------------+
+| Kalibrasi                                         |
++---------------------------------------------------+
+| > Kalibrasi TDS                                   |
+|   Kalibrasi Turbidity                             |
+|   Kalibrasi Suhu                                  |
+|                                                   |
++---------------------------------------------------+
+| Water Quality Analyzer                            |
++---------------------------------------------------+
+```
 
-### Nilai TDS/Turbidity tidak stabil
-- Pastikan sensor analog terhubung dengan referensi power dan ground yang benar.
-- Gunakan filter waktu yang sudah disediakan.
-- Cek apakah pin ADC dan konfigurasi resolusi benar.
+#### 1. Layar Interaktif Kalibrasi TDS:
+Gunakan tombol `UP`/`DOWN` untuk menyelaraskan nilai Target Acuan (misal `707 ppm`), lalu tekan `OK` untuk menghitung $K$-factor baru dan menyimpannya ke EEPROM Flash.
+```text
++---------------------------------------------------+
+| Kalibrasi TDS                                     |
++---------------------------------------------------+
+| ADC Raw : 1245                                    |
+| Target  : [ 707 ppm ]                             |
+| UP/DN:Target OK:Simpan                            |
+|                                                   |
++---------------------------------------------------+
+| Celupkan ke larutan 707ppm                        |
++---------------------------------------------------+
+```
 
-### Firmware tidak bisa upload
-- Pastikan board dan port yang dipilih sesuai.
-- Periksa apakah bootloader / wiring upload sudah benar.
-- Gunakan kabel upload dan mode reset yang sesuai untuk STM32.
+#### 2. Layar Interaktif Kalibrasi Turbidity:
+Celupkan sensor ke air murni jernih (aquades 0 NTU), lalu tekan tombol `OK` untuk mengunci tegangan $V_{\text{clear}}$ dan menyimpannya ke EEPROM Flash.
+```text
++---------------------------------------------------+
+| Kalibrasi Turbidity                               |
++---------------------------------------------------+
+| ADC Raw : 3850 (3.10V)                            |
+| V_Clear : 4.10 V                                  |
+| Tekan OK: Lock 0 NTU                              |
+|                                                   |
++---------------------------------------------------+
+| Air Aquades (0 NTU)                               |
++---------------------------------------------------+
+```
 
-## 14. Catatan Pengembangan
+#### 3. Layar Interaktif Kalibrasi Suhu:
+Gunakan tombol `LEFT`/`RIGHT` untuk mengatur offset koreksi suhu ($\pm 0.1\text{ }^\circ\text{C}$), lalu tekan tombol `OK` untuk menyimpannya ke EEPROM Flash.
+```text
++---------------------------------------------------+
+| Kalibrasi Suhu                                    |
++---------------------------------------------------+
+| Suhu Raw: 27.4 C                                  |
+| Offset  : [ -0.4 C ]                              |
+| LF/RT:Offset OK:Simpan                            |
+|                                                   |
++---------------------------------------------------+
+| Samakan dgn termometer                            |
++---------------------------------------------------+
+```
 
-Proyek ini dirancang dengan pendekatan modular:
-- satu file untuk konfigurasi,
-- satu file untuk antarmuka hardware,
-- satu file untuk GUI,
-- satu file untuk task scheduler.
+---
 
-Hal ini memudahkan pengembangan lanjutan, penambahan sensor baru, atau perubahan tampilan tanpa mengubah struktur inti firmware.
+### 9.6. Menu Pengaturan & Adjust Mode (SETTINGS)
+Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*.
 
-## 15. Status Proyek
+```text
++---------------------------------------------------+
+| Pengaturan                                        |
++---------------------------------------------------+
+| > Brightness                           200        |
+|   Kontras                              128        |
+|   Reset Pengaturan                                |
+|   Informasi Firmware                              |
++---------------------------------------------------+
+| Water Quality Analyzer                            |
++---------------------------------------------------+
+```
 
-Proyek ini merupakan firmware embedded yang masih dapat dikembangkan lebih lanjut, terutama untuk:
-- peningkatan algoritma kalibrasi,
-- pengolahan data kualitas air yang lebih presisi,
-- penambahan menu diagnostik,
-- integrasi komunikasi ke aplikasi atau server.
+#### Tampilan Adjust Mode (`*`):
+Tekan `OK` pada `Brightness`/`Kontras` hingga kursor berubah menjadi `*`. Gunakan tombol `LEFT`/`RIGHT` untuk mengubah nilai, tekan `OK`/`BACK` untuk menyimpan.
+```text
++---------------------------------------------------+
+| Pengaturan                                        |
++---------------------------------------------------+
+| * Brightness                           215        |
+|   Kontras                              128        |
+|   Reset Pengaturan                                |
+|   Informasi Firmware                              |
++---------------------------------------------------+
+| Water Quality Analyzer                            |
++---------------------------------------------------+
+```
 
-## 16. Penutup
+---
 
-Dokumentasi ini dibuat untuk mempermudah pemahaman, pengembangan, dan penggunaan firmware Water Quality Analyzer. Jika Anda ingin melanjutkan proyek ini, pastikan semua pengaturan hardware dan library selalu konsisten dengan file `config.h`.
+### 9.7. Layar Informasi System (ABOUT)
+Menampilkan spesifikasi firmware, MCU, dan penggunaan RAM secara *real-time*.
+```text
++---------------------------------------------------+
+| Tentang                                           |
++---------------------------------------------------+
+| Alat: Water Quality Analyzer                      |
+| FW  : v1.0.0                                      |
+| HW  : Rev-A (Blackpill F401CCU6)                  |
+| MCU : STM32F401CCU6                               |
+| RTOS: FreeRTOS Aktif                              |
+| Heap: 48240 B                                     |
++---------------------------------------------------+
+```
+
+---
+
+## 10. Pengujian & Validasi Baseline
+
+Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` akan mengeksekusi uji coba validasi otomatis 1x pada `Serial1`:
+
+```text
+========================================
+    VALIDASI AUTOMATIS FUZZY LOGIC    
+========================================
+Input Test  : TDS = 350.0 ppm, Turbidity = 10.0 NTU
+Hasil Skor  : 32.8
+Status Label: Ganti Filter/Endapkan Sedimen
+========================================
+```
+
+Target skor $32.8$ (`LTM`) ini memverifikasi bahwa perhitungan Fuzzy Sugeno pada MCU STM32 100% konsisten dengan perhitungan manual dan simulasi MATLAB.
+
+---
+
+## 11. Panduan Cara Kalibrasi Sensor
+
+### A. Kalibrasi TDS (1-Point Buffer Solution)
+1. Siapkan larutan standar TDS acuan (misal **707 ppm**).
+2. Celupkan probe TDS ke dalam larutan standar dan tunggu hingga nilai pembacaan stabil.
+3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi** $\rightarrow$ **Kalibrasi TDS**.
+4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`).
+5. Tekan tombol **OK**. Perangkat akan menghitung faktor pengali $K$-Factor baru secara otomatis dan menyimpannya ke memori EEPROM Flash.
+
+### B. Kalibrasi Turbidity (Air Murni 0 NTU)
+1. Siapkan air murni aquades (0 NTU).
+2. Celupkan sensor Turbidity SEN0189 ke dalam air aquades.
+3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi** $\rightarrow$ **Kalibrasi Turbidity**.
+4. Amati nilai ADC Raw dan tegangan pada layar hingga stabil.
+5. Tekan tombol **OK**. Perangkat akan mengunci tegangan air jernih $V_{\text{clear}}$ sebagai referensi 0 NTU dan menyimpannya ke memori EEPROM Flash.
+
+### C. Kalibrasi Suhu (DS18B20 Offset)
+1. Tempatkan DS18B20 bersama termometer laboratorium presisi di dalam wadah air yang sama.
+2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi** $\rightarrow$ **Kalibrasi Suhu**.
+3. Bandingkan nilai **Suhu Raw** pada layar dengan pembacaan termometer laboratorium.
+4. Tekan tombol `LEFT` atau `RIGHT` untuk menambah atau mengurangi nilai **Offset** hingga hasil akhir sesuai dengan termometer laboratorium.
+5. Tekan tombol **OK** untuk menyimpan nilai offset ke memori EEPROM Flash.
+
+---
+
+## 12. Cara Build dan Upload
+
+1. Buka folder proyek ini pada **Arduino IDE** atau **VS Code + STM32duino**.
+2. Pilih Board: **Generic STM32F4 series** $\rightarrow$ **BlackPill F401CC**.
+3. Pastikan semua library pendukung sudah terinstall.
+4. Compile dan upload firmware ke STM32 Blackpill.
+5. Buka Serial Monitor pada baud rate `115200` untuk mengamati log startup validasi dan telemetri debug.
