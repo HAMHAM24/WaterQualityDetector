@@ -42,6 +42,20 @@ void setup() {
     display_init();    // I2C + OLED SSD1306
     gui_init();         // FSM GUI mulai dari Splash Screen
 
+    // --- TEST VALIDASI TEMPATAN (BASELINE MATLAB: TDS=350, Turbidity=10) ---
+    float testTds = 350.0f;
+    float testTurb = 10.0f;
+    float testSkor = FuzzyKualitasAir_HitungSkor(testTds, testTurb);
+    KualitasAir_t testStatus = FuzzyKualitasAir_GetStatus(testSkor);
+
+    Serial1.println(F("========================================"));
+    Serial1.println(F("    VALIDASI AUTOMATIS FUZZY LOGIC    "));
+    Serial1.println(F("========================================"));
+    Serial1.print(F("Input Test  : TDS = 350.0 ppm, Turbidity = 10.0 NTU\n"));
+    Serial1.print(F("Hasil Skor  : ")); Serial1.println(testSkor, 1); // Harus ≈ 32.8
+    Serial1.print(F("Status Label: ")); Serial1.println(FuzzyKualitasAir_GetPesan(testStatus)); // Target: LTM
+    Serial1.println(F("========================================"));
+
     tasks_createAll(); // buat seluruh task FreeRTOS
 
     vTaskStartScheduler(); // alih kendali penuh ke FreeRTOS

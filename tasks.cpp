@@ -152,6 +152,15 @@ static void taskSerialDebug(void* pvParameters) {
         Serial1.print(F(" / "));
         Serial1.println(sensorSnapshot.turbidityFiltered);
 
+        Serial1.print(F("TDS Comp      : "));
+        Serial1.println(sensorSnapshot.tdsCompensated);
+
+        Serial1.print(F("Fuzzy Skor    : "));
+        Serial1.print(sensorSnapshot.fuzzyScore);
+        Serial1.print(F(" ["));
+        Serial1.print(FuzzyKualitasAir_GetPesan(sensorSnapshot.qualityStatus));
+        Serial1.println(F("]"));
+
         Serial1.print(F("Buttons P/R/H : "));
         for (uint8_t i = 0; i < static_cast<uint8_t>(ButtonID::COUNT); i++) {
             Serial1.print(buttonSnapshot[i].pressed ? '1' : '0');
