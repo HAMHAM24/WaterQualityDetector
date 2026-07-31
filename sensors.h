@@ -55,4 +55,10 @@ uint16_t sensors_readTurbidityRaw();
  */
 void sensors_updateTurbidity();
 
+/**
+ * @brief Mengeksekusi kompensasi suhu TDS dan perhitungan skor Fuzzy Sugeno,
+ *        lalu menyimpan hasil ke g_sensorData secara thread-safe.
+ */
+void sensors_processFuzzy();
+
 #endif // SENSORS_H

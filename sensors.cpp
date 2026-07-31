@@ -118,7 +118,7 @@ void sensors_readTemperature() {
     }
 
     if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-        g_sensorData.temperature = temperatureC;
+        g_sensorData.temperature = (status == SensorStatus::OK) ? (temperatureC + g_calibParams.tempOffset) : temperatureC;
         g_sensorData.temperatureStatus = status;
         g_systemState.displayDirty = true;
         xSemaphoreGive(g_dataMutex);
@@ -140,14 +140,14 @@ void sensors_updateTDS() {
     float filtered = pushSampleAndAverage(s_tdsSampleBuffer, s_tdsSampleIndex,
                                            s_tdsSampleFilled, s_tdsSampleSum, raw);
 
-    // Heuristik sederhana: pembacaan mentok di batas bawah/atas ADC secara
-    // terus-menerus mengindikasikan sensor terputus atau short-circuit.
+    float calibratedTds = filtered * g_calibParams.tdsKFactor;
+
     SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
                                                               : SensorStatus::OK;
 
     if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
         g_sensorData.tdsRaw = raw;
-        g_sensorData.tdsFiltered = filtered;
+        g_sensorData.tdsFiltered = calibratedTds;
         g_sensorData.tdsStatus = status;
         g_systemState.displayDirty = true;
         xSemaphoreGive(g_dataMutex);
@@ -166,17 +166,59 @@ uint16_t sensors_readTurbidityRaw() {
  */
 void sensors_updateTurbidity() {
     uint16_t raw = sensors_readTurbidityRaw();
-    float filtered = pushSampleAndAverage(s_turbiditySampleBuffer, s_turbiditySampleIndex,
-                                           s_turbiditySampleFilled, s_turbiditySampleSum, raw);
+    float filteredRaw = pushSampleAndAverage(s_turbiditySampleBuffer, s_turbiditySampleIndex,
+                                              s_turbiditySampleFilled, s_turbiditySampleSum, raw);
+
+    // Konversi ADC raw ke Voltage (0-3.3V)
+    float voltage = (filteredRaw / static_cast<float>(ADC_MAX_VALUE)) * ADC_REFERENCE_VOLTAGE;
+    
+    // Pemetaan NTU relatif terhadap tegangan air jernih (VClear)
+    float ntu = 0.0f;
+    if (voltage < g_calibParams.turbidityVClear) {
+        ntu = (g_calibParams.turbidityVClear - voltage) * 200.0f;
+    }
+    if (ntu < 0.0f) ntu = 0.0f;
 
     SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
                                                               : SensorStatus::OK;
 
     if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
         g_sensorData.turbidityRaw = raw;
-        g_sensorData.turbidityFiltered = filtered;
+        g_sensorData.turbidityFiltered = ntu;
         g_sensorData.turbidityStatus = status;
         g_systemState.displayDirty = true;
+        xSemaphoreGive(g_dataMutex);
+    }
+
+    sensors_processFuzzy();
+}
+
+/**
+ * @brief Mengeksekusi kompensasi suhu TDS dan perhitungan skor Fuzzy Sugeno.
+ */
+void sensors_processFuzzy() {
+    float tempSnapshot = 0.0f;
+    float tdsFilteredSnapshot = 0.0f;
+    float turbFilteredSnapshot = 0.0f;
+
+    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+        tempSnapshot = g_sensorData.temperature;
+        tdsFilteredSnapshot = g_sensorData.tdsFiltered;
+        turbFilteredSnapshot = g_sensorData.turbidityFiltered;
+        xSemaphoreGive(g_dataMutex);
+    }
+
+    float tdsComp = FuzzyKualitasAir_KompensasiTDS(tdsFilteredSnapshot, tempSnapshot);
+    float skor = FuzzyKualitasAir_HitungSkor(tdsComp, turbFilteredSnapshot);
+    KualitasAir_t qStatus = FuzzyKualitasAir_GetStatus(skor);
+    StatusSuhu_t tStatus = FuzzyKualitasAir_CekStatusSuhu(tempSnapshot);
+
+    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+        g_sensorData.tdsCompensated = tdsComp;
+        g_sensorData.fuzzyScore     = skor;
+        g_sensorData.qualityStatus  = qStatus;
+        g_sensorData.tempStatus     = tStatus;
+        g_systemState.displayDirty  = true;
         xSemaphoreGive(g_dataMutex);
     }
 }
