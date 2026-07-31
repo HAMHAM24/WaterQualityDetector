@@ -56,6 +56,7 @@ static void transitionTo(MenuState newState) {
         g_systemState.previousMenu = g_systemState.currentMenu;
         g_systemState.currentMenu = newState;
         g_systemState.cursorIndex = 0;
+        g_systemState.measurementSubPage = 0;
         g_systemState.settingsAdjustMode = false;
         g_systemState.displayDirty = true;
         xSemaphoreGive(g_dataMutex);
@@ -155,59 +156,133 @@ static void drawSensorLine(uint8_t y, const char* label, float value,
 }
 
 static void drawMeasurement() {
-    display_drawHeader("Pengukuran");
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    constexpr uint8_t lineHeight = 11;
 
-    constexpr uint8_t lineHeight = 12;
-    uint8_t y = DISPLAY_HEADER_H + 10;
+    if (g_systemState.measurementSubPage == 0) {
+        // --- HALAMAN 1: DATA SENSOR + SKOR FUZZY ---
+        display_drawHeader("Pengukuran (1/2)");
+        uint8_t y = DISPLAY_HEADER_H + 9;
 
-    // Suhu selalu ditampilkan pada seluruh parameter.
-    drawSensorLine(y, "Suhu", g_sensorData.temperature, "C", g_sensorData.temperatureStatus);
-    y += lineHeight;
-
-    const WaterParameter param = g_systemState.activeParameter;
-
-    if (param == WaterParameter::HIGIENE_SANITASI) {
-        drawSensorLine(y, "TDS", g_sensorData.tdsFiltered, "ppm", g_sensorData.tdsStatus);
+        // Baris 1: Suhu + Status Suhu
+        char tempBuf[32];
+        snprintf(tempBuf, sizeof(tempBuf), "Suhu : %.1f C (%s)",
+                 g_sensorData.temperature,
+                 (g_sensorData.tempStatus == SUHU_NORMAL) ? "Normal" : "Abn");
+        g_u8g2.drawStr(2, y, tempBuf);
         y += lineHeight;
-        drawSensorLine(y, "Turbidity", g_sensorData.turbidityFiltered, "NTU", g_sensorData.turbidityStatus);
-    } else if (param == WaterParameter::AIR_SPA || param == WaterParameter::AIR_KOLAM_RENANG) {
-        drawSensorLine(y, "Turbidity", g_sensorData.turbidityFiltered, "NTU", g_sensorData.turbidityStatus);
-    }
-    // PEMANDIAN_UMUM: hanya suhu, tidak ada baris tambahan.
 
-    display_drawStatusBar(PARAMETER_ITEMS[static_cast<uint8_t>(param)], nullptr);
+        // Baris 2: TDS Kompensasi Suhu
+        char tdsBuf[32];
+        snprintf(tdsBuf, sizeof(tdsBuf), "TDS  : %.1f ppm", g_sensorData.tdsCompensated);
+        g_u8g2.drawStr(2, y, tdsBuf);
+        y += lineHeight;
+
+        // Baris 3: Turbidity Filtered
+        char turbBuf[32];
+        snprintf(turbBuf, sizeof(turbBuf), "Turb : %.1f NTU", g_sensorData.turbidityFiltered);
+        g_u8g2.drawStr(2, y, turbBuf);
+        y += lineHeight;
+
+        // Baris 4: Skor Fuzzy + Badge Status
+        const char* badge = (g_sensorData.qualityStatus == STATUS_LAYAK) ? "LAYAK" :
+                            (g_sensorData.qualityStatus == STATUS_LTM)   ? "LTM" : "TL";
+        char skorBuf[32];
+        snprintf(skorBuf, sizeof(skorBuf), "Skor : %.1f [%s]", g_sensorData.fuzzyScore, badge);
+        g_u8g2.drawStr(2, y, skorBuf);
+
+        display_drawStatusBar("Tekan OK untuk detail", nullptr);
+
+    } else {
+        // --- HALAMAN 2: DETAIL FUZZY & PESAN REKOMENDASI ---
+        display_drawHeader("Detail Fuzzy (2/2)");
+        uint8_t y = DISPLAY_HEADER_H + 9;
+
+        // Status Kualitas Air
+        const char* qStr = (g_sensorData.qualityStatus == STATUS_LAYAK) ? "LAYAK" :
+                           (g_sensorData.qualityStatus == STATUS_LTM)   ? "LTM (Layak TM)" : "TL (Tidak Layak)";
+        char line1[32];
+        snprintf(line1, sizeof(line1), "Status: %s", qStr);
+        g_u8g2.drawStr(2, y, line1);
+        y += lineHeight;
+
+        // Status Suhu Air
+        const char* tStr = (g_sensorData.tempStatus == SUHU_NORMAL) ? "Normal" : "Abnormal";
+        char line2[32];
+        snprintf(line2, sizeof(line2), "Suhu  : %s", tStr);
+        g_u8g2.drawStr(2, y, line2);
+        y += lineHeight;
+
+        // Teks Rekomendasi
+        g_u8g2.drawStr(2, y, "Pesan :");
+        y += lineHeight;
+        const char* pesan = FuzzyKualitasAir_GetPesan(g_sensorData.qualityStatus);
+        g_u8g2.drawStr(6, y, pesan);
+
+        display_drawStatusBar("Tekan OK ke data sensor", nullptr);
+    }
 }
 
 static void drawCalibration() {
     drawSimpleList("Kalibrasi", CALIBRATION_ITEMS, CALIBRATION_ITEM_COUNT, g_systemState.cursorIndex);
 }
 
+static uint16_t s_targetTdsRef = 707; // Default larutan acuan 707 ppm
+
 static void drawCalibrationSub() {
-    const char* title = "Kalibrasi";
-    const char* description = "";
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    constexpr uint8_t lineHeight = 11;
+    uint8_t y = DISPLAY_HEADER_H + 9;
+
+    char lineBuf[32];
 
     switch (g_systemState.currentMenu) {
-        case MenuState::CALIBRATION_TDS:
-            title = "Kalibrasi TDS";
-            description = "Referensi belum diatur";
+        case MenuState::CALIBRATION_TDS: {
+            display_drawHeader("Kalibrasi TDS");
+
+            snprintf(lineBuf, sizeof(lineBuf), "ADC Raw : %u", g_sensorData.tdsRaw);
+            g_u8g2.drawStr(2, y, lineBuf); y += lineHeight;
+
+            snprintf(lineBuf, sizeof(lineBuf), "Target  : [ %u ppm ]", s_targetTdsRef);
+            g_u8g2.drawStr(2, y, lineBuf); y += lineHeight;
+
+            g_u8g2.drawStr(2, y, "UP/DN:Target OK:Simpan");
+            display_drawStatusBar("Celupkan ke larutan 707ppm", nullptr);
             break;
-        case MenuState::CALIBRATION_TURBIDITY:
-            title = "Kalibrasi Turbidity";
-            description = "Referensi belum diatur";
+        }
+
+        case MenuState::CALIBRATION_TURBIDITY: {
+            display_drawHeader("Kalibrasi Turbidity");
+
+            float volt = (g_sensorData.turbidityRaw / static_cast<float>(ADC_MAX_VALUE)) * ADC_REFERENCE_VOLTAGE;
+            snprintf(lineBuf, sizeof(lineBuf), "ADC Raw : %u (%.2fV)", g_sensorData.turbidityRaw, volt);
+            g_u8g2.drawStr(2, y, lineBuf); y += lineHeight;
+
+            snprintf(lineBuf, sizeof(lineBuf), "V_Clear : %.2f V", g_calibParams.turbidityVClear);
+            g_u8g2.drawStr(2, y, lineBuf); y += lineHeight;
+
+            g_u8g2.drawStr(2, y, "Tekan OK: Lock 0 NTU");
+            display_drawStatusBar("Air Aquades (0 NTU)", nullptr);
             break;
-        case MenuState::CALIBRATION_TEMPERATURE:
-            title = "Kalibrasi Suhu";
-            description = "Referensi belum diatur";
+        }
+
+        case MenuState::CALIBRATION_TEMPERATURE: {
+            display_drawHeader("Kalibrasi Suhu");
+
+            snprintf(lineBuf, sizeof(lineBuf), "Suhu Raw: %.1f C", g_sensorData.temperature - g_calibParams.tempOffset);
+            g_u8g2.drawStr(2, y, lineBuf); y += lineHeight;
+
+            snprintf(lineBuf, sizeof(lineBuf), "Offset  : [ %+.1f C ]", g_calibParams.tempOffset);
+            g_u8g2.drawStr(2, y, lineBuf); y += lineHeight;
+
+            g_u8g2.drawStr(2, y, "LF/RT:Offset OK:Simpan");
+            display_drawStatusBar("Samakan dgn termometer", nullptr);
             break;
+        }
+
         default:
             break;
     }
-
-    display_drawHeader(title);
-    g_u8g2.setFont(u8g2_font_6x10_tf);
-    g_u8g2.drawStr(4, DISPLAY_HEADER_H + 14, "Status: Belum dikalibrasi");
-    g_u8g2.drawStr(4, DISPLAY_HEADER_H + 26, description);
-    g_u8g2.drawStr(4, DISPLAY_HEADER_H + 40, "Tekan BACK untuk kembali");
 }
 
 static void drawSettings() {
@@ -334,6 +409,13 @@ void gui_update(const ButtonEventMsg& msg) {
             break;
 
         case MenuState::MEASUREMENT:
+            if (isActivate && msg.id == ButtonID::OK) {
+                if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+                    g_systemState.measurementSubPage = (g_systemState.measurementSubPage == 0) ? 1 : 0;
+                    g_systemState.displayDirty = true;
+                    xSemaphoreGive(g_dataMutex);
+                }
+            }
             if (isActivate && msg.id == ButtonID::BACK) transitionTo(MenuState::HOME);
             break;
 
@@ -350,8 +432,51 @@ void gui_update(const ButtonEventMsg& msg) {
             break;
 
         case MenuState::CALIBRATION_TDS:
+            if (isRepeatable && msg.id == ButtonID::UP) {
+                s_targetTdsRef += 5;
+                g_systemState.displayDirty = true;
+            }
+            if (isRepeatable && msg.id == ButtonID::DOWN) {
+                if (s_targetTdsRef >= 5) s_targetTdsRef -= 5;
+                g_systemState.displayDirty = true;
+            }
+            if (isActivate && msg.id == ButtonID::OK) {
+                // Hitung K-Factor baru
+                float rawUncalibratedPpm = (g_calibParams.tdsKFactor > 0.001f)
+                    ? (g_sensorData.tdsFiltered / g_calibParams.tdsKFactor)
+                    : g_sensorData.tdsFiltered;
+                if (rawUncalibratedPpm > 10.0f) {
+                    g_calibParams.tdsKFactor = static_cast<float>(s_targetTdsRef) / rawUncalibratedPpm;
+                    storage_saveCalibration();
+                }
+                transitionTo(MenuState::CALIBRATION);
+            }
+            if (isActivate && msg.id == ButtonID::BACK) transitionTo(MenuState::CALIBRATION);
+            break;
+
         case MenuState::CALIBRATION_TURBIDITY:
+            if (isActivate && msg.id == ButtonID::OK) {
+                // Lock tegangan air murni 0 NTU
+                float volt = (g_sensorData.turbidityRaw / static_cast<float>(ADC_MAX_VALUE)) * ADC_REFERENCE_VOLTAGE;
+                if (volt > 0.5f) {
+                    g_calibParams.turbidityVClear = volt;
+                    storage_saveCalibration();
+                }
+                transitionTo(MenuState::CALIBRATION);
+            }
+            if (isActivate && msg.id == ButtonID::BACK) transitionTo(MenuState::CALIBRATION);
+            break;
+
         case MenuState::CALIBRATION_TEMPERATURE:
+            if (isRepeatable && (msg.id == ButtonID::LEFT || msg.id == ButtonID::RIGHT)) {
+                float delta = (msg.id == ButtonID::RIGHT) ? 0.1f : -0.1f;
+                g_calibParams.tempOffset += delta;
+                g_systemState.displayDirty = true;
+            }
+            if (isActivate && msg.id == ButtonID::OK) {
+                storage_saveCalibration();
+                transitionTo(MenuState::CALIBRATION);
+            }
             if (isActivate && msg.id == ButtonID::BACK) transitionTo(MenuState::CALIBRATION);
             break;
 
