@@ -21,12 +21,19 @@ QueueHandle_t     g_buttonEventQueue = nullptr;
  *        serta membuat mutex data dan queue event tombol.
  */
 void globals_init() {
+    // Inisialisasi parameter kalibrasi dari EEPROM Flash
+    storage_init();
+
     // --- Nilai awal SensorData ---
     g_sensorData.temperature        = 0.0f;
     g_sensorData.tdsRaw             = 0;
     g_sensorData.tdsFiltered        = 0.0f;
     g_sensorData.turbidityRaw       = 0;
     g_sensorData.turbidityFiltered  = 0.0f;
+    g_sensorData.tdsCompensated     = 0.0f;
+    g_sensorData.fuzzyScore         = 0.0f;
+    g_sensorData.qualityStatus      = STATUS_LAYAK;
+    g_sensorData.tempStatus         = SUHU_NORMAL;
     g_sensorData.temperatureStatus  = SensorStatus::OK;
     g_sensorData.tdsStatus          = SensorStatus::OK;
     g_sensorData.turbidityStatus    = SensorStatus::OK;
@@ -44,6 +51,7 @@ void globals_init() {
     g_systemState.currentMenu        = MenuState::SPLASH;
     g_systemState.previousMenu       = MenuState::SPLASH;
     g_systemState.cursorIndex        = 0;
+    g_systemState.measurementSubPage = 0;
     g_systemState.settingsBrightness = DISPLAY_DEFAULT_BRIGHTNESS;
     g_systemState.settingsContrast   = DISPLAY_DEFAULT_CONTRAST;
     g_systemState.settingsAdjustMode = false;

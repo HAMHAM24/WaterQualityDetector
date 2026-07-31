@@ -14,6 +14,8 @@
 #include <Arduino.h>
 #include <STM32FreeRTOS.h>
 #include "config.h"
+#include "fuzzy_kualitas_air.h"
+#include "storage.h"
 
 // =============================================================================
 // ENUM — STATUS SENSOR
@@ -77,7 +79,7 @@ enum class MenuState : uint8_t {
 };
 
 // =============================================================================
-// STRUCT — DATA HASIL PEMBACAAN SELURUH SENSOR
+// STRUCT — DATA HASIL PEMBACAAN SELURUH SENSOR & HASIL FUZZY
 // =============================================================================
 struct SensorData {
     float temperature;          // Celsius
@@ -85,6 +87,12 @@ struct SensorData {
     float tdsFiltered;           // hasil moving average
     uint16_t turbidityRaw;       // ADC mentah 0-4095
     float turbidityFiltered;     // hasil moving average
+
+    // --- Hasil Olahan Fuzzy Logic ---
+    float tdsCompensated;        // TDS setelah kompensasi suhu
+    float fuzzyScore;            // Skor Fuzzy Sugeno (0-100)
+    KualitasAir_t qualityStatus; // STATUS_LAYAK, STATUS_LTM, STATUS_TL
+    StatusSuhu_t tempStatus;     // SUHU_NORMAL, SUHU_ABNORMAL
 
     SensorStatus temperatureStatus;
     SensorStatus tdsStatus;
@@ -117,6 +125,7 @@ struct SystemState {
     MenuState currentMenu;            // halaman GUI yang sedang tampil
     MenuState previousMenu;           // halaman sebelumnya (untuk tombol BACK)
     uint8_t cursorIndex;              // index kursor pada menu berjalan
+    uint8_t measurementSubPage;       // 0 = Data Sensor + Skor, 1 = Detail Fuzzy & Rekomendasi
 
     uint8_t settingsBrightness;       // 10-255
     uint8_t settingsContrast;         // 10-255
