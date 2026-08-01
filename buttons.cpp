@@ -40,10 +40,13 @@ static void emitEvent(ButtonID id, ButtonEvent event) {
     xQueueSend(g_buttonEventQueue, &msg, 0);
 
     uint8_t idx = static_cast<uint8_t>(id);
-    g_buttonStates[idx].pressed  = (event == ButtonEvent::PRESSED);
-    g_buttonStates[idx].released = (event == ButtonEvent::RELEASED);
-    g_buttonStates[idx].hold     = (event == ButtonEvent::HOLD);
-    g_buttonStates[idx].repeat   = (event == ButtonEvent::REPEAT);
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+        g_buttonStates[idx].pressed  = (event == ButtonEvent::PRESSED);
+        g_buttonStates[idx].released = (event == ButtonEvent::RELEASED);
+        g_buttonStates[idx].hold     = (event == ButtonEvent::HOLD);
+        g_buttonStates[idx].repeat   = (event == ButtonEvent::REPEAT);
+        xSemaphoreGive(g_dataMutex);
+    }
 }
 
 /**

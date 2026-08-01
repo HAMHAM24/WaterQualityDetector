@@ -5,10 +5,17 @@
  * @details Prinsip pemisahan tanggung jawab yang ketat:
  *            - gui_update() HANYA mengubah state (dipanggil Task GUI).
  *            - gui_draw()   HANYA menggambar (dipanggil Task OLED).
+ *
+ *          Aturan penguncian data: gui_draw() mengambil SATU snapshot
+ *          SensorData + SystemState di bawah g_dataMutex, lalu menggambar
+ *          sepenuhnya dari salinan lokal tersebut. Ini mencegah torn read
+ *          (nilai float 4 byte terbaca separuh saat Task Water Sensor
+ *          sedang menulisnya) dan menjamin seluruh elemen pada satu frame
+ *          berasal dari titik waktu yang sama.
+ *
  *          Menambah halaman baru cukup: tambah nilai enum MenuState di
- *          globals.h, buat satu fungsi update*() dan satu draw*(), lalu
- *          daftarkan pada dispatch table di gui.cpp. Tidak ada bagian
- *          struktur utama yang perlu diubah.
+ *          globals.h, buat satu cabang pada gui_update() dan satu fungsi
+ *          draw*(), lalu daftarkan pada dispatch table di gui.cpp.
  */
 
 #ifndef GUI_H
@@ -24,7 +31,7 @@ void gui_init();
 /**
  * @brief Memproses satu event tombol sesuai halaman GUI yang sedang
  *        aktif dan memperbarui SystemState (state transition FSM).
- *        Fungsi ini TIDAK melakukan operasi gambar apapun.
+ *        Fungsi ini TIDAK melakukan operasi gambar maupun penulisan flash.
  * @param msg Event tombol yang diterima dari g_buttonEventQueue.
  */
 void gui_update(const ButtonEventMsg& msg);

@@ -82,11 +82,14 @@ enum class MenuState : uint8_t {
 // STRUCT — DATA HASIL PEMBACAAN SELURUH SENSOR & HASIL FUZZY
 // =============================================================================
 struct SensorData {
-    float temperature;          // Celsius
+    float temperature;          // Celsius (sudah termasuk offset kalibrasi)
+    float temperatureRaw;        // Celsius sebelum offset kalibrasi
     uint16_t tdsRaw;             // ADC mentah 0-4095
-    float tdsFiltered;           // hasil moving average
+    float tdsVoltage;            // tegangan sisi sensor setelah koreksi divider
+    float tdsFiltered;           // TDS hasil konversi + kalibrasi (ppm)
     uint16_t turbidityRaw;       // ADC mentah 0-4095
-    float turbidityFiltered;     // hasil moving average
+    float turbidityVoltage;      // tegangan sisi sensor setelah koreksi divider
+    float turbidityFiltered;     // kekeruhan hasil konversi (NTU)
 
     // --- Hasil Olahan Fuzzy Logic ---
     float tdsCompensated;        // TDS setelah kompensasi suhu
@@ -127,6 +130,9 @@ struct SystemState {
     uint8_t cursorIndex;              // index kursor pada menu berjalan
     uint8_t measurementSubPage;       // 0 = Data Sensor + Skor, 1 = Detail Fuzzy & Rekomendasi
 
+    uint16_t calibTdsTarget;          // nilai acuan larutan TDS pada layar kalibrasi
+    bool calibSaving;                 // true saat pesan "Menyimpan..." perlu tampil
+
     uint8_t settingsBrightness;       // 10-255
     uint8_t settingsContrast;         // 10-255
     bool settingsAdjustMode;          // true = LEFT/RIGHT mengubah nilai setting
@@ -145,11 +151,23 @@ extern SystemState  g_systemState;
 extern SemaphoreHandle_t g_dataMutex;         // melindungi g_sensorData & g_systemState
 extern QueueHandle_t     g_buttonEventQueue;  // producer: TaskButton, consumer: TaskGUI
 
+// Lama tunggu standar saat mengambil g_dataMutex. Semua modul memakai nilai
+// yang sama agar perilaku penguncian konsisten dan mudah ditelusuri.
+constexpr TickType_t DATA_MUTEX_TIMEOUT = pdMS_TO_TICKS(50);
+
+/**
+ * @brief Mengembalikan profil baku mutu fuzzy untuk parameter air tertentu.
+ *        Selalu mengembalikan pointer valid; parameter di luar rentang
+ *        dipetakan ke profil Higiene Sanitasi.
+ */
+const FuzzyProfil_t* globals_getProfile(WaterParameter param);
+
 /**
  * @brief Inisialisasi seluruh variabel global ke nilai default dan
  *        membuat objek FreeRTOS (mutex, queue) yang dipakai bersama.
  *        Wajib dipanggil satu kali dari setup() sebelum task dibuat.
+ * @return true jika seluruh objek FreeRTOS berhasil dibuat.
  */
-void globals_init();
+bool globals_init();
 
 #endif // GLOBALS_H

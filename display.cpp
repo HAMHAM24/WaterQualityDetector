@@ -20,6 +20,7 @@ void display_init() {
     Wire.setSCL(PIN_OLED_SCL);
     Wire.setSDA(PIN_OLED_SDA);
     Wire.begin();
+    Wire.setClock(400000);  // SSD1306 mendukung fast-mode I2C (400 kHz)
 
     g_u8g2.begin();
     g_u8g2.setContrast(DISPLAY_DEFAULT_CONTRAST);

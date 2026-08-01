@@ -1,7 +1,13 @@
 #include "fuzzy_kualitas_air.h"
 #include <math.h>
+#include <stddef.h>   /* NULL */
 
-/* ---------- KONFIGURASI BREAKPOINT (HASIL DARI TUNING DI MATLAB) -------- */
+/* ---------- KONFIGURASI BREAKPOINT (HASIL DARI TUNING DI MATLAB) --------
+ * Nilai di bawah ini adalah profil Higiene Sanitasi dan identik dengan isi
+ * kualitas_air.fis, sehingga uji validasi baseline (TDS=350, Turbidity=10
+ * -> skor 32.8) tetap menghasilkan angka yang sama.
+ * Profil peruntukan air lain didefinisikan di config.h.
+ */
 /* TDS (ppm) */
 #define TDS_RENDAH_A   0.0f
 #define TDS_RENDAH_B   0.0f
@@ -42,6 +48,18 @@
 #define SUHU_NORMAL_MAX 31.0f
 #define SUHU_REFERENSI  25.0f   /* referensi kompensasi TDS */
 
+/* Profil bawaan: Higiene Sanitasi. Nilainya sama dengan makro di atas. */
+static const FuzzyProfil_t s_profilDefault = {
+    TDS_RENDAH_C,  TDS_SEDANG_C,  TDS_TINGGI_C,
+    TURB_RENDAH_C, TURB_SEDANG_C, TURB_TINGGI_C,
+    THRESH_LAYAK,  THRESH_LTM
+};
+
+const FuzzyProfil_t* FuzzyKualitasAir_ProfilDefault(void)
+{
+    return &s_profilDefault;
+}
+
 /* ---------- FUNGSI MEMBERSHIP FUNCTION SEGITIGA (trimf) ----------------- */
 static float trimf(float x, float a, float b, float c)
 {
@@ -56,17 +74,33 @@ static float fmin2(float a, float b) { return (a < b) ? a : b; }
 
 /* ==========================================================================
  * FUNGSI UTAMA: hitung skor fuzzy (0-100) dari nilai TDS & Turbidity
+ * dengan breakpoint mengikuti profil baku mutu yang aktif.
  * ========================================================================== */
-float FuzzyKualitasAir_HitungSkor(float tds, float turbidity)
+float FuzzyKualitasAir_HitungSkorProfil(const FuzzyProfil_t* profil,
+                                         float tds, float turbidity)
 {
-    /* --- 1. FUZZIFIKASI --- */
-    float tds_rendah  = trimf(tds, TDS_RENDAH_A, TDS_RENDAH_B, TDS_RENDAH_C);
-    float tds_sedang  = trimf(tds, TDS_SEDANG_A, TDS_SEDANG_B, TDS_SEDANG_C);
-    float tds_tinggi  = trimf(tds, TDS_TINGGI_A, TDS_TINGGI_B, TDS_TINGGI_C);
+    if (profil == NULL) {
+        profil = &s_profilDefault;
+    }
 
-    float turb_rendah = trimf(turbidity, TURB_RENDAH_A, TURB_RENDAH_B, TURB_RENDAH_C);
-    float turb_sedang = trimf(turbidity, TURB_SEDANG_A, TURB_SEDANG_B, TURB_SEDANG_C);
-    float turb_tinggi = trimf(turbidity, TURB_TINGGI_A, TURB_TINGGI_B, TURB_TINGGI_C);
+    /* --- 1. FUZZIFIKASI ---
+     * Nilai input dijepit ke batas atas semesta agar pembacaan sensor yang
+     * melampaui rentang (mis. TDS 5000 ppm) tetap menghasilkan derajat
+     * keanggotaan "Tinggi" = 1 dan bukan 0 (yang akan membuat seluruh rule
+     * mati dan skor jatuh ke nilai aman yang keliru).
+     */
+    if (tds < 0.0f) tds = 0.0f;
+    if (tds > profil->tdsC) tds = profil->tdsC;
+    if (turbidity < 0.0f) turbidity = 0.0f;
+    if (turbidity > profil->turbC) turbidity = profil->turbC;
+
+    float tds_rendah  = trimf(tds, 0.0f,          0.0f,          profil->tdsA);
+    float tds_sedang  = trimf(tds, 0.0f,          profil->tdsA,  profil->tdsB);
+    float tds_tinggi  = trimf(tds, profil->tdsA,  profil->tdsB,  profil->tdsC);
+
+    float turb_rendah = trimf(turbidity, 0.0f,           0.0f,           profil->turbA);
+    float turb_sedang = trimf(turbidity, 0.0f,           profil->turbA,  profil->turbB);
+    float turb_tinggi = trimf(turbidity, profil->turbA,  profil->turbB,  profil->turbC);
 
     /* --- 2. EVALUASI 9 RULE (AND = MIN) --- */
     float w[9];
@@ -95,9 +129,10 @@ float FuzzyKualitasAir_HitungSkor(float tds, float turbidity)
         sum_w  += w[i];
     }
 
-    /* Hindari pembagian nol (kalau kebetulan semua w = 0, seharusnya
-       tidak mungkin terjadi karena 3 MF saling overlap penuh di tiap
-       range, tapi tetap dijaga untuk keamanan) */
+    /* Hindari pembagian nol. Karena input sudah dijepit ke semesta dan
+       ketiga MF saling overlap penuh, kondisi ini praktis tidak tercapai,
+       tetapi tetap dijaga. Nilai 0.0f dipilih sebagai fail-safe: lebih baik
+       melaporkan "tidak layak" daripada "aman" saat perhitungan gagal. */
     if (sum_w < 1e-6f) {
         return 0.0f;
     }
@@ -105,18 +140,32 @@ float FuzzyKualitasAir_HitungSkor(float tds, float turbidity)
     return sum_wz / sum_w;
 }
 
+float FuzzyKualitasAir_HitungSkor(float tds, float turbidity)
+{
+    return FuzzyKualitasAir_HitungSkorProfil(&s_profilDefault, tds, turbidity);
+}
+
 /* ==========================================================================
  * FUNGSI KONVERSI SKOR -> LABEL STATUS
  * ========================================================================== */
-KualitasAir_t FuzzyKualitasAir_GetStatus(float skor)
+KualitasAir_t FuzzyKualitasAir_GetStatusProfil(const FuzzyProfil_t* profil, float skor)
 {
-    if (skor >= THRESH_LAYAK) {
+    if (profil == NULL) {
+        profil = &s_profilDefault;
+    }
+
+    if (skor >= profil->threshLayak) {
         return STATUS_LAYAK;
-    } else if (skor >= THRESH_LTM) {
+    } else if (skor >= profil->threshLTM) {
         return STATUS_LTM;
     } else {
         return STATUS_TL;
     }
+}
+
+KualitasAir_t FuzzyKualitasAir_GetStatus(float skor)
+{
+    return FuzzyKualitasAir_GetStatusProfil(&s_profilDefault, skor);
 }
 
 /* Opsional: dapatkan teks pesan untuk ditampilkan ke LCD/OLED */
@@ -136,7 +185,11 @@ const char* FuzzyKualitasAir_GetPesan(KualitasAir_t status)
 
 /* Kompensasi nilai TDS terhadap suhu (rumus umum sensor TDS,
    referensi 25 C, koefisien 0.02 per derajat - sesuaikan dengan
-   datasheet sensor TDS yang kamu pakai kalau berbeda) */
+   datasheet sensor TDS yang kamu pakai kalau berbeda).
+
+   Catatan: sensors.cpp sudah melakukan kompensasi di domain tegangan
+   sesuai referensi DFRobot, yang lebih akurat. Fungsi ini dipertahankan
+   untuk kompatibilitas dan pemakaian di luar jalur sensor utama. */
 float FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu)
 {
     float faktor = 1.0f + 0.02f * (suhu - SUHU_REFERENSI);
@@ -152,35 +205,3 @@ StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float suhu)
     }
     return SUHU_ABNORMAL;
 }
-
-/* ==========================================================================
- * CONTOH PEMAKAIAN DI MAIN LOOP (pseudo-code, sesuaikan dengan program
- * hardware kamu yang sudah ada - HAL_ADC_GetValue, dsb)
- * ==========================================================================
-
-while (1)
-{
-    float suhu_raw   = Baca_Sensor_DS18B20();      // fungsi kamu sendiri
-    float tds_raw    = Baca_Sensor_TDS();           // fungsi kamu sendiri
-    float turbidity  = Baca_Sensor_Turbidity();      // fungsi kamu sendiri
-
-    // 1. Kompensasi TDS terhadap suhu
-    float tds_compensated = FuzzyKualitasAir_KompensasiTDS(tds_raw, suhu_raw);
-
-    // 2. Hitung skor fuzzy
-    float skor = FuzzyKualitasAir_HitungSkor(tds_compensated, turbidity);
-
-    // 3. Konversi ke status/label
-    KualitasAir_t status = FuzzyKualitasAir_GetStatus(skor);
-    const char* pesan = FuzzyKualitasAir_GetPesan(status);
-
-    // 4. Cek status suhu terpisah (untuk ditampilkan sebagai info tambahan)
-    StatusSuhu_t statusSuhu = FuzzyKualitasAir_CekStatusSuhu(suhu_raw);
-
-    // 5. Tampilkan ke LCD/OLED (sesuaikan fungsi display kamu)
-    Tampilkan_LCD(tds_compensated, turbidity, suhu_raw, skor, pesan, statusSuhu);
-
-    HAL_Delay(1000); // sesuaikan interval pembacaan
-}
-
-========================================================================== */

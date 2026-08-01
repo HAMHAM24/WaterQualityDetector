@@ -58,7 +58,7 @@ Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-
 ## 4. Struktur File Proyek
 
 - `main.ino` – Entry point firmware, inisialisasi hardware/software, pengujian otomatis validasi baseline MATLAB, dan inisiasi FreeRTOS scheduler.
-- `config.h` – Single source of truth untuk konfigurasi pin, timing task, prioritas, stack size, dan parameter umum.
+- `config.h` – Single source of truth untuk konfigurasi pin, timing task, prioritas, stack size, konstanta konversi sensor (polinomial TDS, slope NTU, divider input), dan tabel profil baku mutu per peruntukan air.
 - `globals.h` / `globals.cpp` – Variabel state global, mutex data (`g_dataMutex`), queue tombol (`g_buttonEventQueue`), dan struct `SensorData` & `SystemState`.
 - `storage.h` / `storage.cpp` – Modul penyimpanan non-volatile Flash **EEPROM Emulation** untuk parameter kalibrasi ($K$-factor TDS, $V_{\text{clear}}$ Turbidity, Offset Suhu).
 - `fuzzy_kualitas_air.h` / `fuzzy_kualitas_air.c` – Engine evaluasi **Fuzzy Logic Sugeno Order-0**, kompensasi suhu TDS, 9 rule base, dan klasifikasi status kualitas air.
@@ -106,30 +106,59 @@ Pasang library berikut melalui **Arduino Library Manager**:
 
 Firmware menggunakan arsitektur *preemptive multitasking* dengan 6 task independen:
 
-1. **TaskButton** (Periode: 15 ms | Prioritas: 4): Scan GPIO tombol, debounce, dan melempar event ke `g_buttonEventQueue`.
-2. **TaskGui** (Periode: 50 ms | Prioritas: 3): Mengonsumsi event tombol dan meng-update FSM state GUI.
-3. **TaskOled** (Periode: 100 ms | Prioritas: 2): Menggambar ulang layar OLED via U8g2 hanya saat `displayDirty == true`.
-4. **TaskWater** (Periode: 200 ms | Prioritas: 2): Sampling ADC TDS & Turbidity, moving average filter, dan eksekusi Fuzzy Logic Engine.
-5. **TaskTemp** (Periode: 1000 ms | Prioritas: 1): Konversi DS18B20 non-blocking (menunggu 750ms secara kooperatif).
-6. **TaskDebug** (Periode: 1000 ms | Prioritas: 1): Mengirim log telemetri sistem dan pembacaan sensor ke UART `Serial1` (115200 baud).
+1. **TaskButton** (Periode: 15 ms | Prioritas: 4 | Stack: 160w): Scan GPIO tombol, debounce, dan melempar event ke `g_buttonEventQueue`.
+2. **TaskGui** (Periode: 50 ms | Prioritas: 3 | Stack: 320w): Mengonsumsi event tombol dan meng-update FSM state GUI. **Tidak melakukan penulisan flash** — hanya menjadwalkan penyimpanan kalibrasi via `storage_requestSave()`.
+3. **TaskOled** (Periode: 100 ms | Prioritas: 2 | Stack: 512w): Menggambar ulang layar OLED via U8g2 hanya saat `displayDirty == true`. Seluruh format float memakai `dtostrf()`.
+4. **TaskWater** (Periode: 200 ms | Prioritas: 2 | Stack: 256w): Sampling ADC, konversi rantai lengkap ke satuan fisik (ADC→Volt→ppm TDS, Volt→NTU), filter moving average, eksekusi penulisan flash yang tertunda (`storage_processPendingSave()`), dan evaluasi Fuzzy Logic Engine.
+5. **TaskTemp** (Periode: 1000 ms | Prioritas: 1 | Stack: 192w): Konversi DS18B20 non-blocking (menunggu 750ms secara kooperatif).
+6. **TaskDebug** (Periode: 1000 ms | Prioritas: 1 | Stack: 352w): Mengirim log telemetri sistem, pembacaan sensor, dan **stack high water mark** seluruh task ke UART `Serial1` (115200 baud).
+
+**Catatan keamanan penulisan Flash:** STM32F401CCU6 TIDAK memiliki EEPROM sejati.
+Penulisan kalibrasi menggunakan API buffer EEPROM emulation agar satu siklus
+hapus-sektor cukup satu kali untuk seluruh struct, bukan per byte. Operasi
+ini dijalankan dari **TaskWater** (bukan TaskGui) dengan
+`vTaskSuspendAll()` agar scheduler tidak memproses task lain saat bus flash
+terhenti.
 
 ---
 
 ## 8. Fitur Klasifikasi Kualitas Air (Fuzzy Sugeno)
 
-Sistem evaluasi menggunakan **Fuzzy Inference System (FIS) Sugeno Order-0**:
+Sistem evaluasi menggunakan **Fuzzy Inference System (FIS) Sugeno Order-0**
+dengan **breakpoint membership function yang diskalakan secara otomatis
+berdasarkan profil baku mutu peruntukan air** yang dipilih pengguna di
+menu Parameter.
 
-### Input Fuzzy:
+### Input Fuzzy (default Higiene Sanitasi, setara `kualitas_air.fis`):
 1. **TDS Kompensasi (ppm)**: MF Rendah ($0-300$), Sedang ($0-1000$), Tinggi ($300-1200$).
 2. **Turbidity (NTU)**: MF Rendah ($0-5$), Sedang ($0-25$), Tinggi ($5-30$).
 
 ### Evaluasi & Label Output:
 - Evaluasi 9 Aturan (Rule Base AND = MIN).
 - Defuzzifikasi *Weighted Average* menghasilkan **Skor Kualitas Air (0–100)**.
-- **Pengelompokan Label Status**:
-  - **Skor $\ge 75.0$** $\rightarrow$ **LAYAK** (`"Air Aman"`)
-  - **$25.0 \le \text{Skor} < 75.0$** $\rightarrow$ **LTM** (Layak Tidak Memenuhi - `"Ganti Filter/Endapkan Sedimen"`)
-  - **Skor $< 25.0$** $\rightarrow$ **TL** (Tidak Layak - `"Bahaya/Dilarang Digunakan"`)
+- **Pengelompokan Label Status** (ambang milik profil aktif):
+  - **Skor $\ge \text{threshLayak}$** $\rightarrow$ **LAYAK** (`"Air Aman"`)
+  - **$\text{threshLTM} \le \text{Skor} < \text{threshLayak}$** $\rightarrow$ **LTM** (Layak Tidak Memenuhi - `"Ganti Filter/Endapkan Sedimen"`)
+  - **Skor $< \text{threshLTM}$** $\rightarrow$ **TL** (Tidak Layak - `"Bahaya/Dilarang Digunakan"`)
+
+### Profil Baku Mutu per Peruntukan Air
+Tabel berikut mendefinisikan breakpoint MF dan ambang label untuk setiap
+peruntukan air yang dapat dipilih di menu **Parameter**. Kolom `tdsB` dan
+`turbB` adalah baku mutu maksimum (draf, perlu diverifikasi terhadap
+Permenkes resmi).
+
+| Parameter           | `tdsB` (ppm) | `turbB` (NTU) |
+|---------------------|-------------|--------------|
+| Higiene Sanitasi    | 1000        | 25           |
+| Air SPA             | 500         | 1.5          |
+| Air Kolam Renang    | 500         | 0.5          |
+| Pemandian Umum      | 1000        | 25           |
+
+> **Catatan:** breakpoint MF `tdsA` dan `turbA` (ambang "baik") serta `tdsC`
+> dan `turbC` (batas semesta) diskalakan secara internal dari kedua kolom di
+> atas. Profil Higiene Sanitasi adalah profil default dan identik dengan isi
+> `kualitas_air.fis` sehingga uji validasi MATLAB baseline (TDS=350,
+> Turbidity=10 → skor 32.8) tetap 100% konsisten.
 
 ---
 
@@ -153,6 +182,8 @@ Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
 
 ### 9.2. Menu Utama (HOME)
 Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih.
+Daftar memakai viewport bergulir: 4 item terlihat, item kelima muncul saat
+kursor digeser ke bawah.
 ```text
 +---------------------------------------------------+
 | Home                                              |
@@ -161,6 +192,7 @@ Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih.
 |   Parameter                                       |
 |   Kalibrasi                                       |
 |   Pengaturan                                      |
+|   Tentang                     v (ada item lagi)   |
 +---------------------------------------------------+
 | Water Quality Analyzer                            |
 +---------------------------------------------------+
@@ -252,12 +284,13 @@ Gunakan tombol `UP`/`DOWN` untuk menyelaraskan nilai Target Acuan (misal `707 pp
 
 #### 2. Layar Interaktif Kalibrasi Turbidity:
 Celupkan sensor ke air murni jernih (aquades 0 NTU), lalu tekan tombol `OK` untuk mengunci tegangan $V_{\text{clear}}$ dan menyimpannya ke EEPROM Flash.
+Nilai $V_{\text{clear}}$ disimpan dalam fraksi volt.
 ```text
 +---------------------------------------------------+
 | Kalibrasi Turbidity                               |
 +---------------------------------------------------+
-| ADC Raw : 3850 (3.10V)                            |
-| V_Clear : 4.10 V                                  |
+| Volt   : 3.10 V                                   |
+| V_Clear: 3.10 V                                   |
 | Tekan OK: Lock 0 NTU                              |
 |                                                   |
 +---------------------------------------------------+

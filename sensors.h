@@ -37,7 +37,7 @@ uint16_t sensors_readTDSRaw();
 
 /**
  * @brief Mengambil satu sampel TDS, memasukkannya ke buffer moving
- *        average, lalu memperbarui g_sensorData (tdsRaw & tdsFiltered)
+ *        average, mengubahnya menjadi ppm, lalu memperbarui g_sensorData
  *        secara thread-safe. Dipanggil periodik oleh Task Water Sensor.
  */
 void sensors_updateTDS();
@@ -50,15 +50,42 @@ uint16_t sensors_readTurbidityRaw();
 
 /**
  * @brief Mengambil satu sampel turbidity, memasukkannya ke buffer moving
- *        average, lalu memperbarui g_sensorData (turbidityRaw &
- *        turbidityFiltered) secara thread-safe.
+ *        average, mengubahnya menjadi NTU, lalu memperbarui g_sensorData
+ *        secara thread-safe.
  */
 void sensors_updateTurbidity();
 
 /**
- * @brief Mengeksekusi kompensasi suhu TDS dan perhitungan skor Fuzzy Sugeno,
- *        lalu menyimpan hasil ke g_sensorData secara thread-safe.
+ * @brief Mengeksekusi kompensasi suhu TDS dan perhitungan skor Fuzzy Sugeno
+ *        memakai profil baku mutu yang sedang aktif, lalu menyimpan hasil
+ *        ke g_sensorData secara thread-safe.
  */
 void sensors_processFuzzy();
+
+/**
+ * @brief Mengubah nilai ADC mentah menjadi tegangan di sisi sensor,
+ *        termasuk koreksi pembagi tegangan.
+ * @param raw     Nilai ADC 0-4095 (boleh berupa rata-rata, karena float).
+ * @param divider Faktor pembagi tegangan rangkaian (lihat config.h).
+ */
+float sensors_adcToVoltage(float raw, float divider);
+
+/**
+ * @brief Mengubah tegangan sensor TDS menjadi nilai TDS (ppm) memakai
+ *        polinomial resmi DFRobot, dengan kompensasi suhu di domain
+ *        tegangan dan penerapan K-factor hasil kalibrasi.
+ * @param voltage     Tegangan sisi sensor (volt).
+ * @param temperature Suhu air (Celsius) untuk kompensasi.
+ * @return Nilai TDS dalam ppm.
+ */
+float sensors_voltageToTds(float voltage, float temperature);
+
+/**
+ * @brief Mengubah tegangan sensor turbidity menjadi nilai kekeruhan (NTU)
+ *        relatif terhadap tegangan air jernih hasil kalibrasi.
+ * @param voltage Tegangan sisi sensor (volt).
+ * @return Nilai kekeruhan dalam NTU.
+ */
+float sensors_voltageToNtu(float voltage);
 
 #endif // SENSORS_H

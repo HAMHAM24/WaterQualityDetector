@@ -1,13 +1,14 @@
 /**
  * @file    sensors.cpp
  * @brief   Implementasi driver sensor DS18B20 (suhu), TDS DFRobot, dan
- *          turbidity SEN0189, lengkap dengan filter moving average dan
- *          deteksi kegagalan sensor.
+ *          turbidity SEN0189, lengkap dengan filter moving average,
+ *          konversi satuan fisik, dan deteksi kegagalan sensor.
  */
 
 #include "sensors.h"
 #include "globals.h"
 #include "config.h"
+#include "storage.h"
 
 #include <OneWire.h>
 #include <DallasTemperature.h>
@@ -113,14 +114,20 @@ void sensors_readTemperature() {
     } else {
         // Sensor belum pernah terdeteksi saat init; coba deteksi ulang.
         s_tempSensorFound = s_dallasSensors.getAddress(s_tempSensorAddress, 0);
+        if (s_tempSensorFound) {
+            s_dallasSensors.setResolution(s_tempSensorAddress, 12);
+        }
         temperatureC = 0.0f;
         status = SensorStatus::ERROR;
     }
 
-    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-        g_sensorData.temperature = (status == SensorStatus::OK) ? (temperatureC + g_calibParams.tempOffset) : temperatureC;
+    const float offset = (status == SensorStatus::OK) ? g_calibParams.tempOffset : 0.0f;
+
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+        g_sensorData.temperatureRaw    = temperatureC;
+        g_sensorData.temperature       = temperatureC + offset;
         g_sensorData.temperatureStatus = status;
-        g_systemState.displayDirty = true;
+        g_systemState.displayDirty     = true;
         xSemaphoreGive(g_dataMutex);
     }
 }
@@ -132,23 +139,75 @@ uint16_t sensors_readTDSRaw() {
     return static_cast<uint16_t>(analogRead(PIN_TDS_ANALOG));
 }
 
+float sensors_adcToVoltage(float raw, float divider) {
+    return (raw / static_cast<float>(ADC_MAX_VALUE)) * ADC_REFERENCE_VOLTAGE * divider;
+}
+
+float sensors_voltageToTds(float voltage, float temperature) {
+    if (voltage <= 0.0f) {
+        return 0.0f;
+    }
+
+    // Kompensasi suhu dilakukan pada tegangan, sesuai contoh resmi DFRobot.
+    // Bila pembacaan suhu tidak tersedia, temperature akan bernilai 0.0 yang
+    // menghasilkan faktor 0.5 — karena itu suhu di luar rentang wajar
+    // diperlakukan sebagai suhu acuan agar tidak menyimpangkan hasil.
+    float temperatureForComp = temperature;
+    if (temperatureForComp < 1.0f || temperatureForComp > 60.0f) {
+        temperatureForComp = TDS_TEMP_REFERENCE;
+    }
+
+    float factor = 1.0f + TDS_TEMP_COEFFICIENT * (temperatureForComp - TDS_TEMP_REFERENCE);
+    if (factor < 0.1f) {
+        factor = 0.1f;   // proteksi pembagian mendekati nol
+    }
+    const float compensatedVoltage = voltage / factor;
+
+    // Polinomial DFRobot: EC (uS/cm) dari tegangan, lalu EC -> ppm.
+    const float v  = compensatedVoltage;
+    const float v2 = v * v;
+    const float v3 = v2 * v;
+    const float ec = TDS_POLY_C3 * v3 + TDS_POLY_C2 * v2 + TDS_POLY_C1 * v;
+
+    float ppm = ec * TDS_EC_TO_PPM_FACTOR * g_calibParams.tdsKFactor;
+
+    if (ppm < 0.0f) ppm = 0.0f;                 // polinomial bisa negatif di V sangat kecil
+    if (ppm > TDS_PPM_MAX) ppm = TDS_PPM_MAX;   // jepit ke batas wajar sensor
+
+    return ppm;
+}
+
 /**
  * @brief Mengambil sampel TDS, memperbarui filter, dan menyimpan hasil.
  */
 void sensors_updateTDS() {
-    uint16_t raw = sensors_readTDSRaw();
-    float filtered = pushSampleAndAverage(s_tdsSampleBuffer, s_tdsSampleIndex,
-                                           s_tdsSampleFilled, s_tdsSampleSum, raw);
+    const uint16_t raw = sensors_readTDSRaw();
+    const float filteredRaw = pushSampleAndAverage(s_tdsSampleBuffer, s_tdsSampleIndex,
+                                                    s_tdsSampleFilled, s_tdsSampleSum, raw);
 
-    float calibratedTds = filtered * g_calibParams.tdsKFactor;
+    const float voltage = sensors_adcToVoltage(filteredRaw, TDS_INPUT_DIVIDER);
 
-    SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
-                                                              : SensorStatus::OK;
+    // Suhu terakhir dibaca lebih dulu agar kompensasi memakai nilai terbaru.
+    float temperature = TDS_TEMP_REFERENCE;
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+        if (g_sensorData.temperatureStatus == SensorStatus::OK) {
+            temperature = g_sensorData.temperature;
+        }
+        xSemaphoreGive(g_dataMutex);
+    }
 
-    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-        g_sensorData.tdsRaw = raw;
-        g_sensorData.tdsFiltered = calibratedTds;
-        g_sensorData.tdsStatus = status;
+    const float ppm = sensors_voltageToTds(voltage, temperature);
+
+    // ADC yang terjepit di salah satu ujung skala menandakan kabel lepas atau
+    // sensor korslet, bukan pembacaan sah.
+    const SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
+                                                                   : SensorStatus::OK;
+
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+        g_sensorData.tdsRaw      = raw;
+        g_sensorData.tdsVoltage  = voltage;
+        g_sensorData.tdsFiltered = ppm;
+        g_sensorData.tdsStatus   = status;
         g_systemState.displayDirty = true;
         xSemaphoreGive(g_dataMutex);
     }
@@ -161,59 +220,77 @@ uint16_t sensors_readTurbidityRaw() {
     return static_cast<uint16_t>(analogRead(PIN_TURBIDITY_ANALOG));
 }
 
+float sensors_voltageToNtu(float voltage) {
+    // SEN0189 mengeluarkan tegangan tinggi saat air jernih; makin keruh,
+    // tegangan makin turun. NTU dihitung sebagai selisih terhadap tegangan
+    // air jernih hasil kalibrasi.
+    float ntu = (g_calibParams.turbidityVClear - voltage) * TURBIDITY_NTU_PER_VOLT;
+
+    if (ntu < 0.0f) ntu = 0.0f;
+    if (ntu > TURBIDITY_NTU_MAX) ntu = TURBIDITY_NTU_MAX;
+
+    return ntu;
+}
+
 /**
  * @brief Mengambil sampel turbidity, memperbarui filter, dan menyimpan hasil.
  */
 void sensors_updateTurbidity() {
-    uint16_t raw = sensors_readTurbidityRaw();
-    float filteredRaw = pushSampleAndAverage(s_turbiditySampleBuffer, s_turbiditySampleIndex,
-                                              s_turbiditySampleFilled, s_turbiditySampleSum, raw);
+    const uint16_t raw = sensors_readTurbidityRaw();
+    const float filteredRaw = pushSampleAndAverage(s_turbiditySampleBuffer, s_turbiditySampleIndex,
+                                                    s_turbiditySampleFilled, s_turbiditySampleSum, raw);
 
-    // Konversi ADC raw ke Voltage (0-3.3V)
-    float voltage = (filteredRaw / static_cast<float>(ADC_MAX_VALUE)) * ADC_REFERENCE_VOLTAGE;
-    
-    // Pemetaan NTU relatif terhadap tegangan air jernih (VClear)
-    float ntu = 0.0f;
-    if (voltage < g_calibParams.turbidityVClear) {
-        ntu = (g_calibParams.turbidityVClear - voltage) * 200.0f;
-    }
-    if (ntu < 0.0f) ntu = 0.0f;
+    const float voltage = sensors_adcToVoltage(filteredRaw, TURBIDITY_INPUT_DIVIDER);
+    const float ntu = sensors_voltageToNtu(voltage);
 
-    SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
-                                                              : SensorStatus::OK;
+    const SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
+                                                                   : SensorStatus::OK;
 
-    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-        g_sensorData.turbidityRaw = raw;
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+        g_sensorData.turbidityRaw      = raw;
+        g_sensorData.turbidityVoltage  = voltage;
         g_sensorData.turbidityFiltered = ntu;
-        g_sensorData.turbidityStatus = status;
-        g_systemState.displayDirty = true;
+        g_sensorData.turbidityStatus   = status;
+        g_systemState.displayDirty     = true;
         xSemaphoreGive(g_dataMutex);
     }
-
-    sensors_processFuzzy();
 }
 
 /**
- * @brief Mengeksekusi kompensasi suhu TDS dan perhitungan skor Fuzzy Sugeno.
+ * @brief Mengeksekusi perhitungan skor Fuzzy Sugeno memakai profil baku mutu
+ *        peruntukan air yang sedang aktif.
  */
 void sensors_processFuzzy() {
-    float tempSnapshot = 0.0f;
-    float tdsFilteredSnapshot = 0.0f;
-    float turbFilteredSnapshot = 0.0f;
+    float tempSnapshot = TDS_TEMP_REFERENCE;
+    float tdsSnapshot = 0.0f;
+    float turbSnapshot = 0.0f;
+    bool tempValid = false;
+    WaterParameter activeParam = WaterParameter::HIGIENE_SANITASI;
 
-    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
-        tempSnapshot = g_sensorData.temperature;
-        tdsFilteredSnapshot = g_sensorData.tdsFiltered;
-        turbFilteredSnapshot = g_sensorData.turbidityFiltered;
-        xSemaphoreGive(g_dataMutex);
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) != pdTRUE) {
+        return; // gagal mengambil mutex: lewati siklus ini, jangan pakai data basi
     }
+    tempValid    = (g_sensorData.temperatureStatus == SensorStatus::OK);
+    if (tempValid) {
+        tempSnapshot = g_sensorData.temperature;
+    }
+    tdsSnapshot  = g_sensorData.tdsFiltered;
+    turbSnapshot = g_sensorData.turbidityFiltered;
+    activeParam  = g_systemState.activeParameter;
+    xSemaphoreGive(g_dataMutex);
 
-    float tdsComp = FuzzyKualitasAir_KompensasiTDS(tdsFilteredSnapshot, tempSnapshot);
-    float skor = FuzzyKualitasAir_HitungSkor(tdsComp, turbFilteredSnapshot);
-    KualitasAir_t qStatus = FuzzyKualitasAir_GetStatus(skor);
-    StatusSuhu_t tStatus = FuzzyKualitasAir_CekStatusSuhu(tempSnapshot);
+    // Kompensasi suhu sudah diterapkan di sensors_voltageToTds(), sehingga
+    // nilai tdsFiltered memang nilai terkompensasi. Field tdsCompensated
+    // dipertahankan agar tampilan dan telemetri tetap eksplisit.
+    const float tdsComp = tdsSnapshot;
 
-    if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+    const FuzzyProfil_t* profil = globals_getProfile(activeParam);
+    const float skor = FuzzyKualitasAir_HitungSkorProfil(profil, tdsComp, turbSnapshot);
+    const KualitasAir_t qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
+    const StatusSuhu_t tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(tempSnapshot)
+                                            : SUHU_ABNORMAL;
+
+    if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         g_sensorData.tdsCompensated = tdsComp;
         g_sensorData.fuzzyScore     = skor;
         g_sensorData.qualityStatus  = qStatus;

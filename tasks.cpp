@@ -12,12 +12,18 @@
 #include "buttons.h"
 #include "display.h"
 #include "gui.h"
+#include "storage.h"
+
+// Simpan handle task agar TaskDebug dapat melaporkan high water mark.
+static TaskHandle_t s_handles[6] = { nullptr };
+static const char* const s_taskNames[6] = {
+    "Btn", "Temp", "Water", "Gui", "Oled", "Debug"
+};
 
 // =============================================================================
-// TASK BUTTON — scan + debounce, periode 10-20 ms, prioritas tinggi
+// TASK BUTTON — scan + debounce, periode 15 ms, prioritas tinggi
 // =============================================================================
-static void taskButton(void* pvParameters) {
-    (void)pvParameters;
+static void taskButton(void* /* pvParameters */) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_BUTTON_MS);
 
@@ -37,26 +43,45 @@ static void taskTemperature(void* pvParameters) {
 
     for (;;) {
         sensors_requestTemperature();
-        // Menunggu waktu konversi sensor secara kooperatif (bukan delay()
-        // global); task lain tetap berjalan normal selama task ini idle.
         vTaskDelay(pdMS_TO_TICKS(DS18B20_CONVERSION_MS));
         sensors_readTemperature();
-
         vTaskDelayUntil(&lastWakeTime, period);
     }
 }
 
 // =============================================================================
-// TASK WATER SENSOR — baca TDS & Turbidity dengan moving average, periode 200 ms
+// TASK WATER SENSOR — baca TDS & Turbidity, proses fuzzy, simpan kalibrasi.
+// Periode 200 ms.
 // =============================================================================
-static void taskWaterSensor(void* pvParameters) {
-    (void)pvParameters;
+static void taskWaterSensor(void* /* pvParameters */) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_WATER_SENSOR_MS);
 
     for (;;) {
+        // Tangani permintaan penyimpanan kalibrasi yang tertunda. Ini adalah
+        // titik aman karena: (a) TaskTemp sedang idle (menunggu 750+ms),
+        // (b) TaskOled belum menggambar, dan (c) I2C/OneWire tidak aktif.
+        if (storage_processPendingSave()) {
+            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+                g_systemState.calibSaving = false;
+                g_systemState.displayDirty = true;
+                xSemaphoreGive(g_dataMutex);
+            }
+        } else {
+            // Reset flag kalau tidak ada penulisan — pastikan tidak macet.
+            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+                if (g_systemState.calibSaving) {
+                    g_systemState.calibSaving = false;
+                    g_systemState.displayDirty = true;
+                }
+                xSemaphoreGive(g_dataMutex);
+            }
+        }
+
         sensors_updateTDS();
         sensors_updateTurbidity();
+        sensors_processFuzzy();
+
         vTaskDelayUntil(&lastWakeTime, period);
     }
 }
@@ -64,17 +89,15 @@ static void taskWaterSensor(void* pvParameters) {
 // =============================================================================
 // TASK GUI — hanya mengubah state (FSM), tidak menggambar apapun
 // =============================================================================
-static void taskGui(void* pvParameters) {
-    (void)pvParameters;
+static void taskGui(void* /* pvParameters */) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_GUI_MS);
 
     ButtonEventMsg msg;
 
     for (;;) {
-        gui_tick(); // transisi otomatis berbasis waktu (mis. splash screen)
+        gui_tick();
 
-        // Kuras seluruh event tombol yang tertunda di queue tanpa memblokir.
         while (xQueueReceive(g_buttonEventQueue, &msg, 0) == pdTRUE) {
             gui_update(msg);
         }
@@ -86,15 +109,14 @@ static void taskGui(void* pvParameters) {
 // =============================================================================
 // TASK OLED — hanya menggambar, periode 100 ms, refresh hanya saat dirty
 // =============================================================================
-static void taskOled(void* pvParameters) {
-    (void)pvParameters;
+static void taskOled(void* /* pvParameters */) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_OLED_MS);
 
     for (;;) {
         bool needRedraw = false;
 
-        if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+        if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
             needRedraw = g_systemState.displayDirty;
             g_systemState.displayDirty = false;
             xSemaphoreGive(g_dataMutex);
@@ -109,10 +131,9 @@ static void taskOled(void* pvParameters) {
 }
 
 // =============================================================================
-// TASK SERIAL DEBUG — laporan status sistem, periode 1000 ms
+// TASK SERIAL DEBUG — laporan status sistem + stack high water mark
 // =============================================================================
-static void taskSerialDebug(void* pvParameters) {
-    (void)pvParameters;
+static void taskSerialDebug(void* /* pvParameters */) {
     TickType_t lastWakeTime = xTaskGetTickCount();
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_SERIAL_DEBUG_MS);
 
@@ -124,10 +145,14 @@ static void taskSerialDebug(void* pvParameters) {
 
     for (;;) {
         SensorData sensorSnapshot;
-        ButtonState buttonSnapshot[static_cast<uint8_t>(ButtonID::COUNT)];
-        MenuState menuSnapshot;
+        memset(&sensorSnapshot, 0, sizeof(sensorSnapshot));
 
-        if (xSemaphoreTake(g_dataMutex, pdMS_TO_TICKS(20)) == pdTRUE) {
+        ButtonState buttonSnapshot[static_cast<uint8_t>(ButtonID::COUNT)];
+        memset(buttonSnapshot, 0, sizeof(buttonSnapshot));
+
+        MenuState menuSnapshot = MenuState::SPLASH;
+
+        if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
             sensorSnapshot = g_sensorData;
             for (uint8_t i = 0; i < static_cast<uint8_t>(ButtonID::COUNT); i++) {
                 buttonSnapshot[i] = g_buttonStates[i];
@@ -174,6 +199,18 @@ static void taskSerialDebug(void* pvParameters) {
         Serial1.print(F("Menu Aktif    : "));
         Serial1.println(menuNames[static_cast<uint8_t>(menuSnapshot)]);
 
+        // Stack high water mark: byte tersisa terendah (paling kecil)
+        Serial1.print(F("Stack Min (B) : "));
+        for (uint8_t i = 0; i < 6; i++) {
+            if (s_handles[i] != nullptr) {
+                Serial1.print(s_taskNames[i]);
+                Serial1.print('=');
+                Serial1.print(uxTaskGetStackHighWaterMark(s_handles[i]));
+                Serial1.print(' ');
+            }
+        }
+        Serial1.println();
+
         Serial1.print(F("Free Heap     : "));
         Serial1.print(xPortGetFreeHeapSize());
         Serial1.println(F(" bytes"));
@@ -185,22 +222,32 @@ static void taskSerialDebug(void* pvParameters) {
 // =============================================================================
 // PEMBUATAN SELURUH TASK
 // =============================================================================
-void tasks_createAll() {
-    xTaskCreate(taskButton, "TaskButton", STACK_SIZE_BUTTON, nullptr,
-                TASK_PRIORITY_BUTTON, nullptr);
+bool tasks_createAll() {
+    BaseType_t rc;
 
-    xTaskCreate(taskTemperature, "TaskTemp", STACK_SIZE_TEMPERATURE, nullptr,
-                TASK_PRIORITY_TEMPERATURE, nullptr);
+    rc = xTaskCreate(taskButton, "TaskButton", STACK_SIZE_BUTTON, nullptr,
+                     TASK_PRIORITY_BUTTON, &s_handles[0]);
+    if (rc != pdPASS) return false;
 
-    xTaskCreate(taskWaterSensor, "TaskWater", STACK_SIZE_WATER_SENSOR, nullptr,
-                TASK_PRIORITY_WATER_SENSOR, nullptr);
+    rc = xTaskCreate(taskTemperature, "TaskTemp", STACK_SIZE_TEMPERATURE, nullptr,
+                     TASK_PRIORITY_TEMPERATURE, &s_handles[1]);
+    if (rc != pdPASS) return false;
 
-    xTaskCreate(taskGui, "TaskGui", STACK_SIZE_GUI, nullptr,
-                TASK_PRIORITY_GUI, nullptr);
+    rc = xTaskCreate(taskWaterSensor, "TaskWater", STACK_SIZE_WATER_SENSOR, nullptr,
+                     TASK_PRIORITY_WATER_SENSOR, &s_handles[2]);
+    if (rc != pdPASS) return false;
 
-    xTaskCreate(taskOled, "TaskOled", STACK_SIZE_OLED, nullptr,
-                TASK_PRIORITY_OLED, nullptr);
+    rc = xTaskCreate(taskGui, "TaskGui", STACK_SIZE_GUI, nullptr,
+                     TASK_PRIORITY_GUI, &s_handles[3]);
+    if (rc != pdPASS) return false;
 
-    xTaskCreate(taskSerialDebug, "TaskDebug", STACK_SIZE_SERIAL_DEBUG, nullptr,
-                TASK_PRIORITY_SERIAL_DEBUG, nullptr);
+    rc = xTaskCreate(taskOled, "TaskOled", STACK_SIZE_OLED, nullptr,
+                     TASK_PRIORITY_OLED, &s_handles[4]);
+    if (rc != pdPASS) return false;
+
+    rc = xTaskCreate(taskSerialDebug, "TaskDebug", STACK_SIZE_SERIAL_DEBUG, nullptr,
+                     TASK_PRIORITY_SERIAL_DEBUG, &s_handles[5]);
+    if (rc != pdPASS) return false;
+
+    return true;
 }

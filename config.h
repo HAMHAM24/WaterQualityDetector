@@ -13,6 +13,7 @@
 
 #include <Arduino.h>
 #include <STM32FreeRTOS.h>
+#include "fuzzy_kualitas_air.h"
 
 // =============================================================================
 // INFORMASI FIRMWARE / HARDWARE
@@ -64,6 +65,113 @@ constexpr float    ADC_REFERENCE_VOLTAGE = 3.3f;
 constexpr uint8_t FILTER_SAMPLE_COUNT = 20;
 
 // =============================================================================
+// PENYESUAIAN RANGKAIAN INPUT ANALOG (SIGNAL CONDITIONING)
+// -----------------------------------------------------------------------------
+// ADC STM32F401 hanya mampu membaca 0-3.3 V. Bila modul sensor disuplai 5 V,
+// output-nya WAJIB diturunkan lewat pembagi tegangan sebelum masuk ADC.
+// Konstanta di bawah ini mengembalikan tegangan hasil baca ADC menjadi
+// tegangan asli di sisi sensor:
+//
+//     V_sensor = V_adc * DIVIDER
+//
+// Nilai yang harus dipakai:
+//   1.0f  -> sensor disuplai 3.3 V, output langsung ke ADC (tanpa pembagi)
+//   2.0f  -> sensor 5 V dengan pembagi 2:1 (dua resistor sama nilai)
+//
+// PENTING: nilai 1.0f di bawah adalah ASUMSI SEMENTARA. Konfirmasi ke
+// perancang hardware bagaimana output sensor disambungkan, lalu ubah HANYA
+// dua angka ini. Seluruh rumus konversi ppm/NTU akan mengikuti otomatis.
+// =============================================================================
+constexpr float TDS_INPUT_DIVIDER       = 1.0f;  // TODO konfirmasi ke tim hardware
+constexpr float TURBIDITY_INPUT_DIVIDER = 1.0f;  // TODO konfirmasi ke tim hardware
+
+// =============================================================================
+// KALIBRASI SENSOR TDS (DFRobot SEN0244 / analog TDS meter)
+// -----------------------------------------------------------------------------
+// Rumus resmi DFRobot mengubah tegangan menjadi nilai TDS:
+//
+//   ecValue = 133.42*V^3 - 255.86*V^2 + 857.39*V   (dalam uS/cm)
+//   tdsValue = ecValue * 0.5                        (faktor konversi EC->TDS)
+//
+// Kompensasi suhu dilakukan di domain tegangan (bukan di ppm) sesuai contoh
+// resmi DFRobot: V_kompensasi = V / (1 + 0.02*(T - 25)).
+// =============================================================================
+constexpr float TDS_POLY_C3 = 133.42f;
+constexpr float TDS_POLY_C2 = -255.86f;
+constexpr float TDS_POLY_C1 = 857.39f;
+constexpr float TDS_EC_TO_PPM_FACTOR = 0.5f;
+constexpr float TDS_TEMP_COEFFICIENT = 0.02f;   // per derajat Celsius
+constexpr float TDS_TEMP_REFERENCE   = 25.0f;   // suhu acuan kompensasi
+constexpr float TDS_PPM_MAX          = 2000.0f; // batas wajar pembacaan ppm
+
+// Nilai kalibrasi default (dipakai saat EEPROM masih kosong)
+constexpr float TDS_KFACTOR_DEFAULT = 1.0f;
+constexpr float TDS_KFACTOR_MIN     = 0.20f;    // batas aman K-factor
+constexpr float TDS_KFACTOR_MAX     = 5.00f;
+
+// Rentang nilai target larutan acuan pada layar kalibrasi TDS
+constexpr uint16_t TDS_CALIB_TARGET_DEFAULT = 707;  // larutan standar 707 ppm
+constexpr uint16_t TDS_CALIB_TARGET_MIN     = 50;
+constexpr uint16_t TDS_CALIB_TARGET_MAX     = 2000;
+constexpr uint16_t TDS_CALIB_TARGET_STEP    = 5;
+
+// =============================================================================
+// KALIBRASI SENSOR TURBIDITY (SEN0189)
+// -----------------------------------------------------------------------------
+// Sensor ini mengeluarkan tegangan TINGGI saat air jernih dan turun saat air
+// makin keruh. Kalibrasi dilakukan dengan merekam tegangan air aquades
+// (0 NTU) sebagai V_clear, lalu:
+//
+//   NTU = (V_clear - V_terukur) * TURBIDITY_NTU_PER_VOLT
+//
+// V_clear default HARUS berada dalam rentang yang benar-benar dapat dicapai
+// oleh ADC (0-3.3 V setelah dikalikan divider). Nilai lama 4.1 V mustahil
+// tercapai sehingga air paling jernih pun selalu terbaca keruh.
+// =============================================================================
+constexpr float TURBIDITY_VCLEAR_DEFAULT = 3.0f;   // volt, wajar untuk air jernih
+constexpr float TURBIDITY_VCLEAR_MIN     = 0.5f;   // batas bawah nilai kalibrasi valid
+constexpr float TURBIDITY_NTU_PER_VOLT   = 200.0f; // slope konversi volt -> NTU
+constexpr float TURBIDITY_NTU_MAX        = 30.0f;  // batas atas semesta fuzzy
+
+// =============================================================================
+// KALIBRASI OFFSET SUHU (DS18B20)
+// =============================================================================
+constexpr float TEMP_OFFSET_DEFAULT = 0.0f;
+constexpr float TEMP_OFFSET_STEP    = 0.1f;   // per penekanan LEFT/RIGHT
+constexpr float TEMP_OFFSET_LIMIT   = 5.0f;   // batas +/- offset yang diizinkan
+
+// =============================================================================
+// PROFIL BAKU MUTU PER PERUNTUKAN AIR
+// -----------------------------------------------------------------------------
+// Urutan array WAJIB sama dengan enum WaterParameter di globals.h.
+//
+// PERINGATAN: angka di bawah ini adalah DRAF yang perlu diverifikasi terhadap
+// dokumen resmi (Permenkes 32/2017 dan penggantinya Permenkes 2/2023).
+// Setiap baris ditandai TODO agar mudah dikoreksi. Format tiap profil:
+//   { tdsA, tdsB, tdsC, turbA, turbB, turbC, threshLayak, threshLTM }
+// dengan A = ambang "baik", B = baku mutu maksimum, C = batas semesta.
+// =============================================================================
+constexpr uint8_t WATER_PROFILE_COUNT = 4;
+
+constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
+    // [0] HIGIENE SANITASI — identik dengan kualitas_air.fis (baseline MATLAB).
+    // TODO verifikasi: TDS maks 1000 ppm, kekeruhan maks 25 NTU.
+    { 300.0f, 1000.0f, 1200.0f,   5.0f, 25.0f, 30.0f,   75.0f, 25.0f },
+
+    // [1] AIR SPA — mendekati mutu air minum, kekeruhan jauh lebih ketat.
+    // TODO verifikasi: kekeruhan maks 1.5 NTU.
+    { 200.0f,  500.0f,  700.0f,   0.5f,  1.5f,  5.0f,   75.0f, 25.0f },
+
+    // [2] AIR KOLAM RENANG — kekeruhan paling ketat karena harus tembus pandang.
+    // TODO verifikasi: kekeruhan maks 0.5 NTU.
+    { 200.0f,  500.0f,  700.0f,   0.2f,  0.5f,  3.0f,   75.0f, 25.0f },
+
+    // [3] PEMANDIAN UMUM — paling longgar (badan air alami).
+    // TODO verifikasi: kekeruhan maks 25 NTU.
+    { 500.0f, 1000.0f, 1500.0f,   5.0f, 25.0f, 50.0f,   75.0f, 25.0f }
+};
+
+// =============================================================================
 // DISPLAY OLED SSD1306 128x64
 // =============================================================================
 constexpr uint8_t DISPLAY_WIDTH       = 128;
@@ -109,14 +217,31 @@ constexpr UBaseType_t TASK_PRIORITY_SERIAL_DEBUG   = tskIDLE_PRIORITY + 1;
 
 // =============================================================================
 // UKURAN STACK TASK (dalam word, 1 word = 4 byte pada ARM Cortex-M)
-// Nilai dipilih konservatif untuk efisiensi RAM STM32F401CCU6 (64 KB SRAM).
+// -----------------------------------------------------------------------------
+// Nilai dinaikkan dari draf awal karena task yang memformat float (dtostrf,
+// snprintf) dan memanggil U8g2 membutuhkan ruang stack jauh lebih besar
+// daripada perkiraan konservatif. Stack overflow pada FreeRTOS bersifat
+// senyap (configCHECK_FOR_STACK_OVERFLOW = 0 secara default), sehingga lebih
+// aman melebihkan: total 1792 word = 7 KB, masih ringan untuk 64 KB SRAM.
 // =============================================================================
-constexpr uint16_t STACK_SIZE_BUTTON        = 128;
-constexpr uint16_t STACK_SIZE_TEMPERATURE   = 160;
-constexpr uint16_t STACK_SIZE_WATER_SENSOR  = 160;
-constexpr uint16_t STACK_SIZE_GUI           = 192;
-constexpr uint16_t STACK_SIZE_OLED          = 256;
-constexpr uint16_t STACK_SIZE_SERIAL_DEBUG  = 192;
+constexpr uint16_t STACK_SIZE_BUTTON        = 160;
+constexpr uint16_t STACK_SIZE_TEMPERATURE   = 192;
+constexpr uint16_t STACK_SIZE_WATER_SENSOR  = 256;
+constexpr uint16_t STACK_SIZE_GUI           = 320;
+constexpr uint16_t STACK_SIZE_OLED          = 512;
+constexpr uint16_t STACK_SIZE_SERIAL_DEBUG  = 352;
+
+// =============================================================================
+// TATA LETAK DAFTAR MENU (dipakai gui.cpp)
+// -----------------------------------------------------------------------------
+// Area konten = tinggi layar - header - status bar = 64 - 12 - 8 = 44 px.
+// Dengan lineHeight 11 px, hanya 4 baris yang benar-benar terlihat. Menu
+// dengan item lebih banyak WAJIB memakai viewport bergulir, jika tidak item
+// terakhir tidak akan pernah tergambar.
+// =============================================================================
+constexpr uint8_t MENU_LINE_HEIGHT    = 11;
+constexpr uint8_t MENU_VISIBLE_ROWS   = 4;
+constexpr uint8_t MENU_FIRST_LINE_Y   = DISPLAY_HEADER_H + 9;
 
 // =============================================================================
 // LAIN-LAIN

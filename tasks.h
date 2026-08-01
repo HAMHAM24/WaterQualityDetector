@@ -15,7 +15,8 @@
  *        Water Sensor, GUI, OLED, Serial Debug) dengan prioritas dan
  *        ukuran stack sesuai config.h. Dipanggil satu kali dari setup()
  *        sebelum vTaskStartScheduler().
+ * @return true jika seluruh task berhasil dibuat.
  */
-void tasks_createAll();
+bool tasks_createAll();
 
 #endif // TASKS_H
