@@ -51,13 +51,11 @@ enum class ButtonEvent : uint8_t {
 };
 
 // =============================================================================
-// ENUM — PARAMETER STANDAR PENGUJIAN AIR
+// ENUM — PARAMETER STANDAR PENGUJIAN AIR (2 KATEGORI)
 // =============================================================================
 enum class WaterParameter : uint8_t {
-    HIGIENE_SANITASI = 0,
-    AIR_SPA,
-    AIR_KOLAM_RENANG,
-    PEMANDIAN_UMUM,
+    AIR_MINUM_HIGIENE = 0,
+    PEMANDIAN_KOLAM,
     COUNT
 };
 
@@ -67,7 +65,7 @@ enum class WaterParameter : uint8_t {
 enum class MenuState : uint8_t {
     SPLASH = 0,
     HOME,
-    PARAMETER,
+    WAITING_SAMPLING,
     MEASUREMENT,
     CALIBRATION,
     CALIBRATION_TDS,

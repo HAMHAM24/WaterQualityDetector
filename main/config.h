@@ -141,7 +141,7 @@ constexpr float TEMP_OFFSET_STEP    = 0.1f;   // per penekanan LEFT/RIGHT
 constexpr float TEMP_OFFSET_LIMIT   = 5.0f;   // batas +/- offset yang diizinkan
 
 // =============================================================================
-// PROFIL BAKU MUTU PER PERUNTUKAN AIR
+// PROFIL BAKU MUTU PER PERUNTUKAN AIR (2 KATEGORI UTAMA)
 // -----------------------------------------------------------------------------
 // Urutan array WAJIB sama dengan enum WaterParameter di globals.h.
 //
@@ -152,10 +152,10 @@ constexpr float TEMP_OFFSET_LIMIT   = 5.0f;   // batas +/- offset yang diizinkan
 //              turbKeruh_a, turbKeruh_b, turbKeruh_c
 //   Thresholds: threshExcellent, threshGood, threshPoor, threshVeryPoor
 // =============================================================================
-constexpr uint8_t WATER_PROFILE_COUNT = 4;
+constexpr uint8_t WATER_PROFILE_COUNT = 2;
 
 constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
-    // [0] HIGIENE SANITASI & AIR MINUM (Default FIS & Note/Membership function.txt)
+    // [0] AIR MINUM & HIGIENE SANITASI (Default FIS & Note)
     {
         150.0f, 300.0f,
         150.0f, 500.0f, 1000.0f,
@@ -166,20 +166,7 @@ constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
         0.875f, 0.625f, 0.375f, 0.125f
     },
 
-    // [1] AIR SPA — standar kekeruhan & mineral khusus SPA
-    // TODO verifikasi terhadap Permenkes
-    {
-        100.0f, 200.0f,
-        100.0f, 300.0f, 500.0f,
-        300.0f, 500.0f, 700.0f,
-        0.5f, 1.0f,
-        0.5f, 1.5f, 3.0f,
-        1.5f, 3.0f, 5.0f,
-        0.875f, 0.625f, 0.375f, 0.125f
-    },
-
-    // [2] AIR KOLAM RENANG — kejernihan sangat tinggi (turbidity ketat)
-    // TODO verifikasi terhadap Permenkes
+    // [1] PEMANDIAN / KOLAM RENANG (Turbidity lebih ketat untuk kejernihan)
     {
         100.0f, 200.0f,
         100.0f, 300.0f, 500.0f,
@@ -187,18 +174,6 @@ constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
         0.2f, 0.5f,
         0.2f, 0.5f, 1.5f,
         0.5f, 1.5f, 3.0f,
-        0.875f, 0.625f, 0.375f, 0.125f
-    },
-
-    // [3] PEMANDIAN UMUM — batas toleransi lebih longgar (badan air terbuka)
-    // TODO verifikasi terhadap Permenkes
-    {
-        250.0f, 500.0f,
-        250.0f, 750.0f, 1000.0f,
-        750.0f, 1000.0f, 1500.0f,
-        2.5f, 5.0f,
-        2.5f, 15.0f, 25.0f,
-        15.0f, 25.0f, 50.0f,
         0.875f, 0.625f, 0.375f, 0.125f
     }
 };
@@ -280,6 +255,7 @@ constexpr uint8_t MENU_FIRST_LINE_Y   = DISPLAY_HEADER_H + 9;
 // =============================================================================
 constexpr uint32_t SERIAL_BAUD_RATE   = 115200;
 constexpr TickType_t SPLASH_SCREEN_MS = 2000;
+constexpr TickType_t SAMPLING_SCREEN_MS = 5000; // Durasi 5 detik stabilisasi membaca sensor
 constexpr uint8_t  BUTTON_EVENT_QUEUE_LENGTH = 8;
 
 #endif // CONFIG_H

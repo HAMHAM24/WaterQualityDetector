@@ -138,7 +138,7 @@ static void taskSerialDebug(void* /* pvParameters */) {
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_SERIAL_DEBUG_MS);
 
     static const char* const menuNames[] = {
-        "SPLASH", "HOME", "PARAMETER", "MEASUREMENT", "CALIBRATION",
+        "SPLASH", "HOME", "WAITING_SAMPLING", "MEASUREMENT", "CALIBRATION",
         "CALIBRATION_TDS", "CALIBRATION_TURBIDITY", "CALIBRATION_TEMPERATURE",
         "SETTINGS", "ABOUT"
     };

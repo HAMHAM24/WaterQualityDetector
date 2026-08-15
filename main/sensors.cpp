@@ -265,7 +265,7 @@ void sensors_processFuzzy() {
     float tdsSnapshot = 0.0f;
     float turbSnapshot = 0.0f;
     bool tempValid = false;
-    WaterParameter activeParam = WaterParameter::HIGIENE_SANITASI;
+    WaterParameter activeParam = WaterParameter::AIR_MINUM_HIGIENE;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) != pdTRUE) {
         return; // gagal mengambil mutex: lewati siklus ini, jangan pakai data basi
