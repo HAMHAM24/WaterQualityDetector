@@ -15,33 +15,35 @@ DefuzzMethod='wtaver'
 Name='TDS'
 Range=[0 1200]
 NumMFs=3
-MF1='Rendah':'trimf',[0 0 300]
-MF2='Sedang':'trimf',[0 300 1000]
-MF3='Tinggi':'trimf',[300 1000 1200]
+MF1='Rendah':'trapmf',[0 0 150 300]
+MF2='Sedang':'trimf',[150 500 1000]
+MF3='Tinggi':'trapmf',[500 1000 1200 1200]
 
 [Input2]
 Name='Turbidity'
 Range=[0 30]
 NumMFs=3
-MF1='Rendah':'trimf',[0 0 5]
-MF2='Sedang':'trimf',[0 5 25]
-MF3='Tinggi':'trimf',[5 25 30]
+MF1='Jernih':'trapmf',[0 0 1.5 3]
+MF2='Sedang':'trimf',[1.5 10 25]
+MF3='Keruh':'trapmf',[10 25 30 30]
 
 [Output1]
 Name='Kualitas'
-Range=[0 100]
-NumMFs=3
-MF1='LAYAK':'constant',[100]
-MF2='LTM':'constant',[50]
-MF3='TL':'constant',[0]
+Range=[0 1]
+NumMFs=5
+MF1='Excellent':'constant',[1]
+MF2='Good':'constant',[0.75]
+MF3='Poor':'constant',[0.5]
+MF4='Very_Poor':'constant',[0.25]
+MF5='Not_Suitable':'constant',[0]
 
 [Rules]
 1 1, 1 (1) : 1
 1 2, 2 (1) : 1
 1 3, 3 (1) : 1
 2 1, 2 (1) : 1
-2 2, 2 (1) : 1
-2 3, 3 (1) : 1
+2 2, 3 (1) : 1
+2 3, 4 (1) : 1
 3 1, 3 (1) : 1
-3 2, 3 (1) : 1
-3 3, 3 (1) : 1
+3 2, 4 (1) : 1
+3 3, 5 (1) : 1

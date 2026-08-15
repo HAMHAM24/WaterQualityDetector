@@ -2,6 +2,7 @@
  * fuzzy_kualitas_air.h
  * Header Fuzzy Sugeno - Klasifikasi Kualitas Air (TDS & Turbidity)
  * Target: STM32 Blackpill (STM32F4xx) - murni float, tanpa dynamic memory
+ * Skala Output: 0.0 - 1.0 (5 Level Kualitas)
  * ========================================================================== */
 
 #ifndef FUZZY_KUALITAS_AIR_H
@@ -9,46 +10,63 @@
 
 #include <math.h>
 
-/* ---------- ENUM STATUS OUTPUT ------------------------------------------ */
+/* ---------- ENUM STATUS OUTPUT KUALITAS AIR (5 LEVEL) ------------------- */
 typedef enum {
-    STATUS_LAYAK = 0,
-    STATUS_LTM,
-    STATUS_TL
+    STATUS_EXCELLENT = 0,   /* z1 = 1.00 - Sangat Baik / Sangat Layak     */
+    STATUS_GOOD,            /* z2 = 0.75 - Baik / Layak                   */
+    STATUS_POOR,            /* z3 = 0.50 - Perlu Filtrasi Ringan          */
+    STATUS_VERY_POOR,       /* z4 = 0.25 - Sangat Buruk / Filtrasi Intensif */
+    STATUS_NOT_SUITABLE     /* z5 = 0.00 - Tidak Lolos / Dilarang         */
 } KualitasAir_t;
 
+/* ---------- ENUM STATUS SUHU AIR (3 LEVEL) ----------------------------- */
 typedef enum {
-    SUHU_NORMAL = 0,
-    SUHU_ABNORMAL
+    SUHU_DINGIN = 0,        /* <= 24 °C                                   */
+    SUHU_NORMAL,            /* 24 - 32 °C                                 */
+    SUHU_PANAS              /* >= 32 °C                                   */
 } StatusSuhu_t;
 
 /* --------------------------------------------------------------------------
- * PROFIL BAKU MUTU (membuat menu Parameter benar-benar berpengaruh)
+ * PROFIL BAKU MUTU FUZZY
  *
- * Setiap peruntukan air (higiene sanitasi, SPA, kolam renang, pemandian
- * umum) memiliki baku mutu berbeda, sehingga breakpoint membership
- * function fuzzy juga harus berbeda. Struktur ini dipakai agar mesin
- * fuzzy tetap generik: satu implementasi, banyak profil.
+ * Mendefinisikan parameter fungsi keanggotaan (MF) trapesium (trapmf) dan
+ * segitiga (trimf) serta ambang klasifikasi status kualitas air (0.0 - 1.0).
  *
- * Pola breakpoint mengikuti FIS hasil tuning MATLAB (kualitas_air.fis):
- *   Rendah  = trimf(0,   0,   A)
- *   Sedang  = trimf(0,   A,   B)
- *   Tinggi  = trimf(A,   B,   C)
- * dengan A = ambang "baik", B = baku mutu maksimum, C = batas semesta.
+ * Pola kurva:
+ *   TDS Rendah     : trapmf [0, 0, tdsRendah_b, tdsRendah_c]
+ *   TDS Sedang     : trimf  [tdsSedang_a, tdsSedang_b, tdsSedang_c]
+ *   TDS Tinggi     : trapmf [tdsTinggi_a, tdsTinggi_b, tdsTinggi_c, tdsTinggi_c]
  *
- * Struktur ini sengaja C murni (tanpa Arduino.h) agar file .c ini dapat
- * dikompilasi sebagai C sekaligus dipakai dari C++.
+ *   Turb Jernih    : trapmf [0, 0, turbJernih_b, turbJernih_c]
+ *   Turb Sedang    : trimf  [turbSedang_a, turbSedang_b, turbSedang_c]
+ *   Turb Keruh     : trapmf [turbKeruh_a, turbKeruh_b, turbKeruh_c, turbKeruh_c]
  * ------------------------------------------------------------------------ */
 typedef struct {
-    float tdsA;          /* ppm - ambang TDS "baik"                        */
-    float tdsB;          /* ppm - baku mutu TDS maksimum                   */
-    float tdsC;          /* ppm - batas atas semesta TDS                   */
+    /* Parameter TDS (ppm / mg/L) */
+    float tdsRendah_b;       /* batas atas keanggotaan penuh (1.0)           */
+    float tdsRendah_c;       /* batas akhir turun ke 0                       */
+    float tdsSedang_a;       /* mulai naik dari 0                            */
+    float tdsSedang_b;       /* puncak keanggotaan penuh (1.0)               */
+    float tdsSedang_c;       /* akhir turun ke 0                             */
+    float tdsTinggi_a;       /* mulai naik dari 0                            */
+    float tdsTinggi_b;       /* mulai keanggotaan penuh (1.0)                */
+    float tdsTinggi_c;       /* batas atas semesta TDS                       */
 
-    float turbA;         /* NTU - ambang kekeruhan "baik"                  */
-    float turbB;         /* NTU - baku mutu kekeruhan maksimum             */
-    float turbC;         /* NTU - batas atas semesta kekeruhan             */
+    /* Parameter Turbidity (NTU) */
+    float turbJernih_b;      /* batas atas keanggotaan penuh (1.0)           */
+    float turbJernih_c;      /* batas akhir turun ke 0                       */
+    float turbSedang_a;      /* mulai naik dari 0                            */
+    float turbSedang_b;      /* puncak keanggotaan penuh (1.0)               */
+    float turbSedang_c;      /* akhir turun ke 0                             */
+    float turbKeruh_a;       /* mulai naik dari 0                            */
+    float turbKeruh_b;       /* mulai keanggotaan penuh (1.0)                */
+    float turbKeruh_c;       /* batas atas semesta Turbidity                 */
 
-    float threshLayak;   /* skor minimum agar berstatus LAYAK              */
-    float threshLTM;     /* skor minimum agar berstatus LTM                */
+    /* Ambang Skor (0.0 - 1.0) untuk konversi ke enum status */
+    float threshExcellent;   /* skor minimum untuk EXCELLENT (misal 0.875)   */
+    float threshGood;        /* skor minimum untuk GOOD (misal 0.625)        */
+    float threshPoor;        /* skor minimum untuk POOR (misal 0.375)        */
+    float threshVeryPoor;    /* skor minimum untuk VERY_POOR (misal 0.125)   */
 } FuzzyProfil_t;
 
 #ifdef __cplusplus
@@ -58,38 +76,51 @@ extern "C" {
 /* ---------- DEKLARASI FUNGSI UTAMA -------------------------------------- */
 
 /**
- * @brief Menghitung skor kualitas air (0-100) dengan profil baku mutu
- *        tertentu. Ini adalah entry point utama yang dipakai firmware.
+ * @brief Menghitung skor kualitas air (0.0 - 1.0) dengan profil baku mutu
+ *        tertentu.
  * @param profil     Profil baku mutu aktif (tidak boleh NULL).
- * @param tds        Nilai TDS terkompensasi suhu, satuan ppm.
+ * @param tds        Nilai TDS terkompensasi suhu, satuan ppm (mg/L).
  * @param turbidity  Nilai kekeruhan, satuan NTU.
+ * @return Skor kualitas air pada skala 0.0 - 1.0.
  */
 float FuzzyKualitasAir_HitungSkorProfil(const FuzzyProfil_t* profil,
                                          float tds, float turbidity);
 
 /**
- * @brief Versi ringkas memakai profil bawaan Higiene Sanitasi. Dipertahankan
- *        agar uji validasi baseline MATLAB (TDS=350, Turb=10 -> 32.8) tetap
- *        dapat dijalankan tanpa menyiapkan profil terlebih dahulu.
+ * @brief Versi ringkas memakai profil default (Higiene Sanitasi / Air Minum).
  */
 float FuzzyKualitasAir_HitungSkor(float tds, float turbidity);
 
 /**
- * @brief Mengubah skor menjadi label status memakai ambang milik profil.
+ * @brief Mengubah skor (0.0 - 1.0) menjadi enum status kualitas air.
  */
 KualitasAir_t FuzzyKualitasAir_GetStatusProfil(const FuzzyProfil_t* profil, float skor);
 
 /**
- * @brief Versi ringkas dengan ambang bawaan (75.0 / 25.0).
+ * @brief Versi ringkas penentuan status memakai profil default.
  */
 KualitasAir_t FuzzyKualitasAir_GetStatus(float skor);
 
-const char*   FuzzyKualitasAir_GetPesan(KualitasAir_t status);
+/**
+ * @brief Mengembalikan teks pesan rekomendasi tindakan.
+ */
+const char* FuzzyKualitasAir_GetPesan(KualitasAir_t status);
+
+/**
+ * @brief Mengembalikan string ringkas label status kualitas air.
+ */
+const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status);
+
+/**
+ * @brief Mengembalikan string status suhu ("Dingin", "Normal", "Panas").
+ */
+const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status);
+
 float         FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu);
 StatusSuhu_t  FuzzyKualitasAir_CekStatusSuhu(float suhu);
 
 /**
- * @brief Profil bawaan Higiene Sanitasi (setara isi kualitas_air.fis).
+ * @brief Profil bawaan default (sesuai Note/Membership function.txt).
  */
 const FuzzyProfil_t* FuzzyKualitasAir_ProfilDefault(void);
 
