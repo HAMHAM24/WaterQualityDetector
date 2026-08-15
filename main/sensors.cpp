@@ -288,7 +288,7 @@ void sensors_processFuzzy() {
     const float skor = FuzzyKualitasAir_HitungSkorProfil(profil, tdsComp, turbSnapshot);
     const KualitasAir_t qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
     const StatusSuhu_t tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(tempSnapshot)
-                                            : SUHU_ABNORMAL;
+                                            : SUHU_NORMAL;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         g_sensorData.tdsCompensated = tdsComp;

@@ -181,8 +181,10 @@ static void taskSerialDebug(void* /* pvParameters */) {
         Serial1.println(sensorSnapshot.tdsCompensated);
 
         Serial1.print(F("Fuzzy Skor    : "));
-        Serial1.print(sensorSnapshot.fuzzyScore);
+        Serial1.print(sensorSnapshot.fuzzyScore, 2);
         Serial1.print(F(" ["));
+        Serial1.print(FuzzyKualitasAir_GetStatusBadge(sensorSnapshot.qualityStatus));
+        Serial1.print(F(" - "));
         Serial1.print(FuzzyKualitasAir_GetPesan(sensorSnapshot.qualityStatus));
         Serial1.println(F("]"));
 

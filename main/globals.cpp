@@ -45,8 +45,8 @@ bool globals_init() {
     g_sensorData.turbidityFiltered  = 0.0f;
     g_sensorData.tdsCompensated     = 0.0f;
     g_sensorData.fuzzyScore         = 0.0f;
-    g_sensorData.qualityStatus      = STATUS_TL;
-    g_sensorData.tempStatus         = SUHU_ABNORMAL;
+    g_sensorData.qualityStatus      = STATUS_NOT_SUITABLE;
+    g_sensorData.tempStatus         = SUHU_NORMAL;
     g_sensorData.temperatureStatus  = SensorStatus::ERROR;
     g_sensorData.tdsStatus          = SensorStatus::ERROR;
     g_sensorData.turbidityStatus    = SensorStatus::ERROR;

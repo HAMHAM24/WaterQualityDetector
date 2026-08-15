@@ -145,30 +145,62 @@ constexpr float TEMP_OFFSET_LIMIT   = 5.0f;   // batas +/- offset yang diizinkan
 // -----------------------------------------------------------------------------
 // Urutan array WAJIB sama dengan enum WaterParameter di globals.h.
 //
-// PERINGATAN: angka di bawah ini adalah DRAF yang perlu diverifikasi terhadap
-// dokumen resmi (Permenkes 32/2017 dan penggantinya Permenkes 2/2023).
-// Setiap baris ditandai TODO agar mudah dikoreksi. Format tiap profil:
-//   { tdsA, tdsB, tdsC, turbA, turbB, turbC, threshLayak, threshLTM }
-// dengan A = ambang "baik", B = baku mutu maksimum, C = batas semesta.
+// Struktur tiap profil mengikuti FuzzyProfil_t:
+//   TDS:       tdsRendah_b, tdsRendah_c, tdsSedang_a, tdsSedang_b, tdsSedang_c,
+//              tdsTinggi_a, tdsTinggi_b, tdsTinggi_c
+//   Turbidity: turbJernih_b, turbJernih_c, turbSedang_a, turbSedang_b, turbSedang_c,
+//              turbKeruh_a, turbKeruh_b, turbKeruh_c
+//   Thresholds: threshExcellent, threshGood, threshPoor, threshVeryPoor
 // =============================================================================
 constexpr uint8_t WATER_PROFILE_COUNT = 4;
 
 constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
-    // [0] HIGIENE SANITASI — identik dengan kualitas_air.fis (baseline MATLAB).
-    // TODO verifikasi: TDS maks 1000 ppm, kekeruhan maks 25 NTU.
-    { 300.0f, 1000.0f, 1200.0f,   5.0f, 25.0f, 30.0f,   75.0f, 25.0f },
+    // [0] HIGIENE SANITASI & AIR MINUM (Default FIS & Note/Membership function.txt)
+    {
+        150.0f, 300.0f,
+        150.0f, 500.0f, 1000.0f,
+        500.0f, 1000.0f, 1200.0f,
+        1.5f, 3.0f,
+        1.5f, 10.0f, 25.0f,
+        10.0f, 25.0f, 30.0f,
+        0.875f, 0.625f, 0.375f, 0.125f
+    },
 
-    // [1] AIR SPA — mendekati mutu air minum, kekeruhan jauh lebih ketat.
-    // TODO verifikasi: kekeruhan maks 1.5 NTU.
-    { 200.0f,  500.0f,  700.0f,   0.5f,  1.5f,  5.0f,   75.0f, 25.0f },
+    // [1] AIR SPA — standar kekeruhan & mineral khusus SPA
+    // TODO verifikasi terhadap Permenkes
+    {
+        100.0f, 200.0f,
+        100.0f, 300.0f, 500.0f,
+        300.0f, 500.0f, 700.0f,
+        0.5f, 1.0f,
+        0.5f, 1.5f, 3.0f,
+        1.5f, 3.0f, 5.0f,
+        0.875f, 0.625f, 0.375f, 0.125f
+    },
 
-    // [2] AIR KOLAM RENANG — kekeruhan paling ketat karena harus tembus pandang.
-    // TODO verifikasi: kekeruhan maks 0.5 NTU.
-    { 200.0f,  500.0f,  700.0f,   0.2f,  0.5f,  3.0f,   75.0f, 25.0f },
+    // [2] AIR KOLAM RENANG — kejernihan sangat tinggi (turbidity ketat)
+    // TODO verifikasi terhadap Permenkes
+    {
+        100.0f, 200.0f,
+        100.0f, 300.0f, 500.0f,
+        300.0f, 500.0f, 700.0f,
+        0.2f, 0.5f,
+        0.2f, 0.5f, 1.5f,
+        0.5f, 1.5f, 3.0f,
+        0.875f, 0.625f, 0.375f, 0.125f
+    },
 
-    // [3] PEMANDIAN UMUM — paling longgar (badan air alami).
-    // TODO verifikasi: kekeruhan maks 25 NTU.
-    { 500.0f, 1000.0f, 1500.0f,   5.0f, 25.0f, 50.0f,   75.0f, 25.0f }
+    // [3] PEMANDIAN UMUM — batas toleransi lebih longgar (badan air terbuka)
+    // TODO verifikasi terhadap Permenkes
+    {
+        250.0f, 500.0f,
+        250.0f, 750.0f, 1000.0f,
+        750.0f, 1000.0f, 1500.0f,
+        2.5f, 5.0f,
+        2.5f, 15.0f, 25.0f,
+        15.0f, 25.0f, 50.0f,
+        0.875f, 0.625f, 0.375f, 0.125f
+    }
 };
 
 // =============================================================================
