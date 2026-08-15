@@ -229,7 +229,7 @@ static void drawMeasurement() {
             char* p = tStr;
             while (*p == ' ') p++;
             snprintf(tempBuf, sizeof(tempBuf), "Suhu : %s C (%s)", p,
-                     (s_view.tempStatus == SUHU_NORMAL) ? "Normal" : "Abn");
+                     FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus));
         } else {
             snprintf(tempBuf, sizeof(tempBuf), "Suhu : ERROR");
         }
@@ -246,12 +246,11 @@ static void drawMeasurement() {
                        s_view.turbidityStatus);
         y += MENU_LINE_HEIGHT;
 
-        // Skor + badge
-        const char* badge = (s_view.qualityStatus == STATUS_LAYAK) ? "LAYAK" :
-                            (s_view.qualityStatus == STATUS_LTM)   ? "LTM" : "TL";
+        // Skor + badge (skor 0.00 - 1.00)
+        const char* badge = FuzzyKualitasAir_GetStatusBadge(s_view.qualityStatus);
         char scoreStr[8];
         char skorBuf[32];
-        dtostrf(s_view.fuzzyScore, 4, 1, scoreStr);
+        dtostrf(s_view.fuzzyScore, 4, 2, scoreStr);
         char* p = scoreStr;
         while (*p == ' ') p++;
         snprintf(skorBuf, sizeof(skorBuf), "Skor : %s [%s]", p, badge);
@@ -265,15 +264,16 @@ static void drawMeasurement() {
         uint8_t y = MENU_FIRST_LINE_Y;
         g_u8g2.setFont(u8g2_font_6x10_tf);
 
-        const char* qStr = (s_view.qualityStatus == STATUS_LAYAK) ? "LAYAK" :
-                           (s_view.qualityStatus == STATUS_LTM)   ? "LTM (Layak TM)"
-                                                                   : "TL (Tdk Layak)";
+        const char* qStr = (s_view.qualityStatus == STATUS_EXCELLENT)    ? "EXCELLENT" :
+                           (s_view.qualityStatus == STATUS_GOOD)         ? "GOOD (Layak)" :
+                           (s_view.qualityStatus == STATUS_POOR)         ? "POOR (Perlu Fltr)" :
+                           (s_view.qualityStatus == STATUS_VERY_POOR)    ? "VERY POOR" : "NOT SUITABLE";
         char lineBuf[32];
         snprintf(lineBuf, sizeof(lineBuf), "Status: %s", qStr);
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
-        const char* tStr = (s_view.tempStatus == SUHU_NORMAL) ? "Normal" : "Abnormal";
+        const char* tStr = FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus);
         snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %s", tStr);
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;

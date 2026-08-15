@@ -29,7 +29,7 @@ void setup() {
     display_init();
     gui_init();
 
-    // --- TEST VALIDASI BASELINE (MATLAB: TDS=350, Turb=10 → ~32.8) ---
+    // --- TEST VALIDASI BASELINE (TDS=350, Turb=10 → 0.50 [Poor]) ---
     float testTds = 350.0f;
     float testTurb = 10.0f;
     float testSkor = FuzzyKualitasAir_HitungSkor(testTds, testTurb);
@@ -39,19 +39,28 @@ void setup() {
     Serial1.println(F("    VALIDASI AUTOMATIS FUZZY LOGIC    "));
     Serial1.println(F("========================================"));
     Serial1.print(F("Input Test  : TDS = 350.0 ppm, Turbidity = 10.0 NTU\n"));
-    Serial1.print(F("Hasil Skor  : ")); Serial1.println(testSkor, 1);
-    Serial1.print(F("Status Label: ")); Serial1.println(FuzzyKualitasAir_GetPesan(testStatus));
+    Serial1.print(F("Hasil Skor  : ")); Serial1.println(testSkor, 2);
+    Serial1.print(F("Status Badge: ")); Serial1.println(FuzzyKualitasAir_GetStatusBadge(testStatus));
+    Serial1.print(F("Status Pesan: ")); Serial1.println(FuzzyKualitasAir_GetPesan(testStatus));
     Serial1.println(F("========================================"));
 
-    // Test kasus ekstrem: air jernih ideal → harus LAYAK.
+    // Test kasus ekstrem: air jernih ideal → harus EXCELLENT (1.00).
     float testSkorLayak = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f);
+    KualitasAir_t statusLayak = FuzzyKualitasAir_GetStatus(testSkorLayak);
     Serial1.print(F("Air Jernih (50 ppm, 0.5 NTU): "));
-    Serial1.println(FuzzyKualitasAir_GetPesan(FuzzyKualitasAir_GetStatus(testSkorLayak)));
+    Serial1.print(testSkorLayak, 2);
+    Serial1.print(F(" ["));
+    Serial1.print(FuzzyKualitasAir_GetStatusBadge(statusLayak));
+    Serial1.println(F("]"));
 
-    // Test kasus ekstrem: air buruk → harus TL.
+    // Test kasus ekstrem: air buruk → harus NOT_SUITABLE (0.00).
     float testSkorBuruk = FuzzyKualitasAir_HitungSkor(1100.0f, 28.0f);
+    KualitasAir_t statusBuruk = FuzzyKualitasAir_GetStatus(testSkorBuruk);
     Serial1.print(F("Air Buruk (1100 ppm, 28 NTU): "));
-    Serial1.println(FuzzyKualitasAir_GetPesan(FuzzyKualitasAir_GetStatus(testSkorBuruk)));
+    Serial1.print(testSkorBuruk, 2);
+    Serial1.print(F(" ["));
+    Serial1.print(FuzzyKualitasAir_GetStatusBadge(statusBuruk));
+    Serial1.println(F("]"));
     Serial1.println(F("========================================"));
 
     if (!tasks_createAll()) {
