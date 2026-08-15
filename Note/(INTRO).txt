@@ -1,0 +1,34 @@
+ (INTRO)
+
+Physic Water Quality Index 
+	FBN
+
+1/Menu Pertama
+Objek Air :
+
+-Air Minum dan Higiene Sanitasi
+-Pemandian / Kolam
+
+2/Screen tunggu
+
+    MODE: AIR MINUM      
+                        
+   Membaca Sensor...    
+   [||||||||.....]      (Skip aja klo ribet) 
+
+3/Dashboard hasil pengukuran   
+
+(tombol kebawah)
+
+	|
+	V
+
+4/ Detail Rekomendasi Tindakan
+
+1. Excellent [z1 = 1.0]  (sangat Baik/ sangat Layak)
+2. Good [z2 = 0.75] (Baik / Layak)
+3. Poor [z3 = 0.50] (perlu filtrasi ringan)
+4. Very Poor [z4 = 0.25] ( Sangat buruk/ butuh filtrasi intensif)
+5. Not-Suitable [z5 =0.0] ( Tidak lolos )
+
+Tombol Reset =  Kembali ke 1/menu
