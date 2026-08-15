@@ -125,40 +125,34 @@ terhenti.
 ## 8. Fitur Klasifikasi Kualitas Air (Fuzzy Sugeno)
 
 Sistem evaluasi menggunakan **Fuzzy Inference System (FIS) Sugeno Order-0**
-dengan **breakpoint membership function yang diskalakan secara otomatis
-berdasarkan profil baku mutu peruntukan air** yang dipilih pengguna di
-menu Parameter.
+dengan kurva trapesium (`trapmf`) dan segitiga (`trimf`) serta **breakpoint
+membership function yang diskalakan secara otomatis berdasarkan profil baku mutu
+peruntukan air** yang dipilih pengguna di menu Parameter.
 
-### Input Fuzzy (default Higiene Sanitasi, setara `kualitas_air.fis`):
-1. **TDS Kompensasi (ppm)**: MF Rendah ($0-300$), Sedang ($0-1000$), Tinggi ($300-1200$).
-2. **Turbidity (NTU)**: MF Rendah ($0-5$), Sedang ($0-25$), Tinggi ($5-30$).
+### Input Fuzzy (Default Higiene Sanitasi / Air Minum, setara `kualitas_air.fis`):
+1. **TDS Kompensasi (ppm / mg/L)**:
+   - Rendah : `trapmf [0, 0, 150, 300]`
+   - Sedang : `trimf  [150, 500, 1000]`
+   - Tinggi : `trapmf [500, 1000, 1200, 1200]`
+2. **Turbidity (NTU)**:
+   - Jernih : `trapmf [0, 0, 1.5, 3.0]`
+   - Sedang : `trimf  [1.5, 10.0, 25.0]`
+   - Keruh  : `trapmf [10.0, 25.0, 30.0, 30.0]`
 
-### Evaluasi & Label Output:
+### Evaluasi & Label Output (Skala 0.00 - 1.00):
 - Evaluasi 9 Aturan (Rule Base AND = MIN).
-- Defuzzifikasi *Weighted Average* menghasilkan **Skor Kualitas Air (0–100)**.
-- **Pengelompokan Label Status** (ambang milik profil aktif):
-  - **Skor $\ge \text{threshLayak}$** $\rightarrow$ **LAYAK** (`"Air Aman"`)
-  - **$\text{threshLTM} \le \text{Skor} < \text{threshLayak}$** $\rightarrow$ **LTM** (Layak Tidak Memenuhi - `"Ganti Filter/Endapkan Sedimen"`)
-  - **Skor $< \text{threshLTM}$** $\rightarrow$ **TL** (Tidak Layak - `"Bahaya/Dilarang Digunakan"`)
+- Defuzzifikasi *Weighted Average* menghasilkan **Skor Kualitas Air (0.00 – 1.00)**.
+- **5 Tingkat Klasifikasi Status & Rekomendasi**:
+  - **Skor $\ge 0.875$** $\rightarrow$ **EXCELLENT** (`"Air Sangat Baik & Layak"`)
+  - **$0.625 \le \text{Skor} < 0.875$** $\rightarrow$ **GOOD** (`"Air Baik / Layak Digunakan"`)
+  - **$0.375 \le \text{Skor} < 0.625$** $\rightarrow$ **POOR** (`"Perlu Filtrasi Ringan"`)
+  - **$0.125 \le \text{Skor} < 0.375$** $\rightarrow$ **VERY POOR** (`"Butuh Filtrasi Intensif"`)
+  - **Skor $< 0.125$** $\rightarrow$ **NOT SUITABLE** (`"Tidak Lolos / Dilarang"`)
 
-### Profil Baku Mutu per Peruntukan Air
-Tabel berikut mendefinisikan breakpoint MF dan ambang label untuk setiap
-peruntukan air yang dapat dipilih di menu **Parameter**. Kolom `tdsB` dan
-`turbB` adalah baku mutu maksimum (draf, perlu diverifikasi terhadap
-Permenkes resmi).
-
-| Parameter           | `tdsB` (ppm) | `turbB` (NTU) |
-|---------------------|-------------|--------------|
-| Higiene Sanitasi    | 1000        | 25           |
-| Air SPA             | 500         | 1.5          |
-| Air Kolam Renang    | 500         | 0.5          |
-| Pemandian Umum      | 1000        | 25           |
-
-> **Catatan:** breakpoint MF `tdsA` dan `turbA` (ambang "baik") serta `tdsC`
-> dan `turbC` (batas semesta) diskalakan secara internal dari kedua kolom di
-> atas. Profil Higiene Sanitasi adalah profil default dan identik dengan isi
-> `kualitas_air.fis` sehingga uji validasi MATLAB baseline (TDS=350,
-> Turbidity=10 → skor 32.8) tetap 100% konsisten.
+### Status Suhu Air (3 Level):
+- **Dingin** : $\le 24.0\ ^\circ\text{C}$
+- **Normal** : $24.0 - 32.0\ ^\circ\text{C}$
+- **Panas**  : $\ge 32.0\ ^\circ\text{C}$
 
 ---
 
@@ -211,7 +205,7 @@ Menampilkan hasil pengolahan data sensor dan Fuzzy Logic secara *real-time*. Tek
 | Suhu : 27.5 C (Normal)                            |
 | TDS  : 343.1 ppm                                  |
 | Turb : 10.0 NTU                                   |
-| Skor : 32.8 [LTM]                                 |
+| Skor : 0.50 [POOR]                                |
 +---------------------------------------------------+
 | Tekan OK untuk detail                             |
 +---------------------------------------------------+
@@ -222,10 +216,10 @@ Menampilkan hasil pengolahan data sensor dan Fuzzy Logic secara *real-time*. Tek
 +---------------------------------------------------+
 | Detail Fuzzy (2/2)                                |
 +---------------------------------------------------+
-| Status: LTM (Layak TM)                            |
+| Status: POOR (Perlu Fltr)                         |
 | Suhu  : Normal                                    |
 | Pesan :                                           |
-|   Ganti Filter/Endapkan Sedimen                   |
+|   Perlu Filtrasi Ringan                           |
 +---------------------------------------------------+
 | Tekan OK ke data sensor                           |
 +---------------------------------------------------+
@@ -374,12 +368,16 @@ Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` akan mengeksekusi uji 
     VALIDASI AUTOMATIS FUZZY LOGIC    
 ========================================
 Input Test  : TDS = 350.0 ppm, Turbidity = 10.0 NTU
-Hasil Skor  : 32.8
-Status Label: Ganti Filter/Endapkan Sedimen
+Hasil Skor  : 0.50
+Status Badge: POOR
+Status Pesan: Perlu Filtrasi Ringan
+========================================
+Air Jernih (50 ppm, 0.5 NTU): 1.00 [EXCELLENT]
+Air Buruk (1100 ppm, 28 NTU): 0.00 [NOT-SUIT]
 ========================================
 ```
 
-Target skor $32.8$ (`LTM`) ini memverifikasi bahwa perhitungan Fuzzy Sugeno pada MCU STM32 100% konsisten dengan perhitungan manual dan simulasi MATLAB.
+Target skor $0.50$ (`POOR`) ini memverifikasi bahwa perhitungan Fuzzy Sugeno pada MCU STM32 100% konsisten dengan rancangan FIS dan simulasi MATLAB.
 
 ---
 
