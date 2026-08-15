@@ -165,99 +165,99 @@ Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
 ```text
 +---------------------------------------------------+
 |                                                   |
-|                 Water Quality                     |
-|                   Analyzer                        |
+|             Physic Water Quality                  |
+|                    Index                          |
+|                     FBN                           |
 |                    v1.0.0                         |
++---------------------------------------------------+
+```
+
+---
+
+### 9.2. Menu Utama (Pemilihan Objek Air & Fitur)
+Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih.
+```text
++---------------------------------------------------+
+| Pilih Mode Uji Air                                |
++---------------------------------------------------+
+| > 1. Air Minum & Higiene                          |
+|   2. Pemandian / Kolam                            |
+|   3. Kalibrasi Sensor                             |
+|   4. Pengaturan OLED                              |
++---------------------------------------------------+
+| Gunakan UP/DN, Tekan OK                           |
++---------------------------------------------------+
+```
+
+---
+
+### 9.3. Screen Tunggu (Stabilisasi Sensor - 5 Detik)
+Tampil selama **5 detik** setelah memilih mode air untuk memberikan waktu
+stabilisasi pembacaan filter *Circular Moving Average* (20 sampel).
+```text
++---------------------------------------------------+
+| MODE: AIR MINUM                                   |
++---------------------------------------------------+
+|                                                   |
+|   Membaca Sensor...                               |
+|   [||||||||||||||||||................]            |
 |                                                   |
 +---------------------------------------------------+
-```
-
----
-
-### 9.2. Menu Utama (HOME)
-Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih.
-Daftar memakai viewport bergulir: 4 item terlihat, item kelima muncul saat
-kursor digeser ke bawah.
-```text
-+---------------------------------------------------+
-| Home                                              |
-+---------------------------------------------------+
-| > Mulai Pengukuran                                |
-|   Parameter                                       |
-|   Kalibrasi                                       |
-|   Pengaturan                                      |
-|   Tentang                     v (ada item lagi)   |
-+---------------------------------------------------+
-| Water Quality Analyzer                            |
+| Menstabilkan pembacaan...             [BACK] Batal|
 +---------------------------------------------------+
 ```
 
 ---
 
-### 9.3. Layar Pengukuran - Dual-Page View
-Menampilkan hasil pengolahan data sensor dan Fuzzy Logic secara *real-time*. Tekan `OK` untuk berpindah halaman.
+### 9.4. Layar Hasil Pengukuran - Dual-Page View
+Menampilkan hasil pengolahan data sensor dan evaluasi Fuzzy Sugeno ($0.00 - 1.00$) secara *real-time*.
 
-#### Page 1: Data Sensor & Skor Fuzzy (Default)
+#### Page 1: Dashboard Data Sensor & Skor (Default)
+Gunakan tombol `DOWN` $\downarrow$ untuk melihat detail rekomendasi, atau `BACK` untuk kembali ke Menu Utama.
 ```text
 +---------------------------------------------------+
-| Pengukuran (1/2)                                  |
+| Air Minum (1/2)                                   |
 +---------------------------------------------------+
 | Suhu : 27.5 C (Normal)                            |
 | TDS  : 343.1 ppm                                  |
 | Turb : 10.0 NTU                                   |
 | Skor : 0.50 [POOR]                                |
 +---------------------------------------------------+
-| Tekan OK untuk detail                             |
+| [DN] Rekomendasi                      [BACK] Menu |
 +---------------------------------------------------+
 ```
 
-#### Page 2: Detail Fuzzy & Pesan Rekomendasi (Setelah Tekan OK)
+#### Page 2: Detail Rekomendasi Tindakan
+Gunakan tombol `UP` $\uparrow$ untuk kembali ke dashboard nilai, atau `BACK` untuk kembali ke Menu Utama.
 ```text
 +---------------------------------------------------+
-| Detail Fuzzy (2/2)                                |
+| Rekomendasi (2/2)                                 |
 +---------------------------------------------------+
-| Status: POOR (Perlu Fltr)                         |
-| Suhu  : Normal                                    |
+| Status: POOR (Perlu Filtrasi)                     |
+| Suhu  : Normal (27.5 C)                           |
 | Pesan :                                           |
 |   Perlu Filtrasi Ringan                           |
 +---------------------------------------------------+
-| Tekan OK ke data sensor                           |
+| [UP] Dashboard                        [BACK] Menu |
 +---------------------------------------------------+
 ```
 
 ---
 
-### 9.4. Menu Parameter Air (PARAMETER)
-Digunakan untuk memilih standar peruntukan air yang diuji.
-```text
-+---------------------------------------------------+
-| Parameter                                         |
-+---------------------------------------------------+
-| > Higiene Sanitasi                                |
-|   Air SPA                                         |
-|   Air Kolam Renang                                |
-|   Pemandian Umum                                  |
-+---------------------------------------------------+
-| Higiene Sanitasi                                  |
-+---------------------------------------------------+
-```
-
----
-
-### 9.5. Menu Kalibrasi Interaktif & Sub-menu (CALIBRATION)
-Digunakan untuk mengkalibrasi sensor TDS, Turbidity, dan Suhu secara interaktif.
+### 9.5. Menu Kalibrasi Sensor & Sub-menu (CALIBRATION)
+Digunakan untuk mengkalibrasi sensor TDS, Turbidity, Suhu, atau mereset ke standar pabrik secara interaktif.
 
 #### Menu Pilihan Kalibrasi:
 ```text
 +---------------------------------------------------+
-| Kalibrasi                                         |
+| Kalibrasi Sensor                                  |
 +---------------------------------------------------+
 | > Kalibrasi TDS                                   |
 |   Kalibrasi Turbidity                             |
 |   Kalibrasi Suhu                                  |
-|                                                   |
+|   Reset Pabrik                                    |
 +---------------------------------------------------+
-| Water Quality Analyzer                            |
+| Pilih sensor, Tekan OK                [BACK] Menu |
 +---------------------------------------------------+
 ```
 
@@ -272,13 +272,12 @@ Gunakan tombol `UP`/`DOWN` untuk menyelaraskan nilai Target Acuan (misal `707 pp
 | UP/DN:Target OK:Simpan                            |
 |                                                   |
 +---------------------------------------------------+
-| Celupkan ke larutan 707ppm                        |
+| Celupkan ke larutan standar          [BACK] Batal |
 +---------------------------------------------------+
 ```
 
 #### 2. Layar Interaktif Kalibrasi Turbidity:
 Celupkan sensor ke air murni jernih (aquades 0 NTU), lalu tekan tombol `OK` untuk mengunci tegangan $V_{\text{clear}}$ dan menyimpannya ke EEPROM Flash.
-Nilai $V_{\text{clear}}$ disimpan dalam fraksi volt.
 ```text
 +---------------------------------------------------+
 | Kalibrasi Turbidity                               |
@@ -288,7 +287,7 @@ Nilai $V_{\text{clear}}$ disimpan dalam fraksi volt.
 | Tekan OK: Lock 0 NTU                              |
 |                                                   |
 +---------------------------------------------------+
-| Air Aquades (0 NTU)                               |
+| Air Aquades (0 NTU)                  [BACK] Batal |
 +---------------------------------------------------+
 ```
 
@@ -299,29 +298,29 @@ Gunakan tombol `LEFT`/`RIGHT` untuk mengatur offset koreksi suhu ($\pm 0.1\text{
 | Kalibrasi Suhu                                    |
 +---------------------------------------------------+
 | Suhu Raw: 27.4 C                                  |
-| Offset  : [ -0.4 C ]                              |
+| Offset  : [ +0.1 C ]                              |
 | LF/RT:Offset OK:Simpan                            |
 |                                                   |
 +---------------------------------------------------+
-| Samakan dgn termometer                            |
+| Samakan dgn termometer               [BACK] Batal |
 +---------------------------------------------------+
 ```
 
 ---
 
-### 9.6. Menu Pengaturan & Adjust Mode (SETTINGS)
+### 9.6. Menu Pengaturan OLED & Adjust Mode (SETTINGS)
 Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*.
 
 ```text
 +---------------------------------------------------+
-| Pengaturan                                        |
+| Pengaturan OLED                                   |
 +---------------------------------------------------+
 | > Brightness                           200        |
 |   Kontras                              128        |
 |   Reset Pengaturan                                |
 |   Informasi Firmware                              |
 +---------------------------------------------------+
-| Water Quality Analyzer                            |
+| Pilih item, Tekan OK                  [BACK] Menu |
 +---------------------------------------------------+
 ```
 
@@ -329,14 +328,14 @@ Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*.
 Tekan `OK` pada `Brightness`/`Kontras` hingga kursor berubah menjadi `*`. Gunakan tombol `LEFT`/`RIGHT` untuk mengubah nilai, tekan `OK`/`BACK` untuk menyimpan.
 ```text
 +---------------------------------------------------+
-| Pengaturan                                        |
+| Pengaturan OLED                                   |
 +---------------------------------------------------+
 | * Brightness                           215        |
 |   Kontras                              128        |
 |   Reset Pengaturan                                |
 |   Informasi Firmware                              |
 +---------------------------------------------------+
-| Water Quality Analyzer                            |
+| Gunakan LF/RT, Tekan OK                           |
 +---------------------------------------------------+
 ```
 
@@ -346,14 +345,16 @@ Tekan `OK` pada `Brightness`/`Kontras` hingga kursor berubah menjadi `*`. Gunaka
 Menampilkan spesifikasi firmware, MCU, dan penggunaan RAM secara *real-time*.
 ```text
 +---------------------------------------------------+
-| Tentang                                           |
+| Tentang Alat                                      |
 +---------------------------------------------------+
 | Alat: Water Quality Analyzer                      |
-| FW  : v1.0.0                                      |
+| FW  : v1.0.0 (FBN)                                |
 | HW  : Rev-A (Blackpill F401CCU6)                  |
 | MCU : STM32F401CCU6                               |
 | RTOS: FreeRTOS Aktif                              |
 | Heap: 48240 B                                     |
++---------------------------------------------------+
+| Tekan BACK untuk kembali                          |
 +---------------------------------------------------+
 ```
 
