@@ -331,7 +331,11 @@ static void drawMeasurement() {
 static void drawCalibration() {
     drawSimpleList("Kalibrasi Sensor", CALIBRATION_ITEMS, CALIBRATION_ITEM_COUNT,
                    s_viewState.cursorIndex);
-    display_drawStatusBar("Pilih sensor, Tekan OK", "[BACK] Menu");
+    if (s_viewState.calibSaving) {
+        display_drawStatusBar("Menyimpan ke Flash...", nullptr);
+    } else {
+        display_drawStatusBar("Pilih sensor, Tekan OK", "[BACK] Menu");
+    }
 }
 
 /**
