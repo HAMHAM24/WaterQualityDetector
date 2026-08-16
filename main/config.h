@@ -24,10 +24,10 @@ constexpr const char* HARDWARE_VERSION  = "Rev-A (Blackpill F401CCU6)";
 constexpr const char* MCU_NAME          = "STM32F401CCU6";
 
 // =============================================================================
-// PIN MAPPING — UART (FTDI) — dipakai otomatis oleh Serial1 STM32duino
+// PIN MAPPING — UART (FTDI / Serial Monitor)
 // =============================================================================
-constexpr uint8_t PIN_UART_RX = PA_9;   // FTDI TX -> MCU RX
-constexpr uint8_t PIN_UART_TX = PA_10;  // FTDI RX -> MCU TX
+constexpr uint8_t PIN_UART_TX = PA_9;   // USART1_TX (MCU TX -> FTDI RX)
+constexpr uint8_t PIN_UART_RX = PA_10;  // USART1_RX (MCU RX <- FTDI TX)
 
 // =============================================================================
 // PIN MAPPING — OLED SSD1306 (I2C)
@@ -45,11 +45,11 @@ constexpr uint8_t PIN_TURBIDITY_ANALOG = PA_1; // SEN0189 analog
 // =============================================================================
 // PIN MAPPING — PUSH BUTTON (Active LOW, Internal Pull-Up)
 // =============================================================================
-constexpr uint8_t PIN_BTN_UP    = PB_12;
-constexpr uint8_t PIN_BTN_DOWN  = PB_13;
-constexpr uint8_t PIN_BTN_LEFT  = PB_14;
-constexpr uint8_t PIN_BTN_RIGHT = PB_15;
-constexpr uint8_t PIN_BTN_OK    = PA_8;
+constexpr uint8_t PIN_BTN_UP    = PB_14;
+constexpr uint8_t PIN_BTN_DOWN  = PA_8;
+constexpr uint8_t PIN_BTN_LEFT  = PB_15;
+constexpr uint8_t PIN_BTN_RIGHT = PB_13;
+constexpr uint8_t PIN_BTN_OK    = PB_12;
 constexpr uint8_t PIN_BTN_BACK  = PB_11;
 
 constexpr uint8_t BUTTON_COUNT = 6;

@@ -150,7 +150,7 @@ static void drawSplash() {
 /** @brief Menu Utama (Pemilihan Objek Air & Fitur) */
 static void drawHome() {
     drawSimpleList("Pilih Mode Uji Air", HOME_ITEMS, HOME_ITEM_COUNT, s_viewState.cursorIndex);
-    display_drawStatusBar("Gunakan UP/DN, Tekan OK", nullptr);
+    display_drawStatusBar("UP/DN:Pilih", "OK:Masuk");
 }
 
 /** @brief Screen Tunggu / Stabilisasi Pembacaan Sensor (5 Detik) */
@@ -181,7 +181,7 @@ static void drawWaitingSampling() {
         g_u8g2.drawBox(barX + 2, barY + 2, fillW, barH - 4);
     }
 
-    display_drawStatusBar("Menstabilkan pembacaan...", "[BACK] Batal");
+    display_drawStatusBar("Stabilisasi...", "BACK:Batal");
 }
 
 /** @brief Mencetak satu baris nilai sensor dengan label dan satuan. */
@@ -289,7 +289,7 @@ static void drawMeasurement() {
         snprintf(skorBuf, sizeof(skorBuf), "Skor : %s [%s]", p, badge);
         g_u8g2.drawStr(2, y, skorBuf);
 
-        display_drawStatusBar("[DN] Rekomendasi", "[BACK] Menu");
+        display_drawStatusBar("DN:Detail", "BACK:Menu");
 
     } else {
         // --- HALAMAN 2: DETAIL REKOMENDASI TINDAKAN ---
@@ -298,11 +298,11 @@ static void drawMeasurement() {
         g_u8g2.setFont(u8g2_font_6x10_tf);
 
         const char* qStr = (s_view.qualityStatus == STATUS_EXCELLENT)    ? "EXCELLENT" :
-                           (s_view.qualityStatus == STATUS_GOOD)         ? "GOOD (Layak)" :
-                           (s_view.qualityStatus == STATUS_POOR)         ? "POOR (Perlu Fltr)" :
-                           (s_view.qualityStatus == STATUS_VERY_POOR)    ? "VERY POOR" : "NOT SUITABLE";
+                           (s_view.qualityStatus == STATUS_GOOD)         ? "GOOD [Baik]" :
+                           (s_view.qualityStatus == STATUS_POOR)         ? "POOR [Kurang]" :
+                           (s_view.qualityStatus == STATUS_VERY_POOR)    ? "VERY POOR" : "TIDAK LAYAK";
         char lineBuf[32];
-        snprintf(lineBuf, sizeof(lineBuf), "Status: %s", qStr);
+        snprintf(lineBuf, sizeof(lineBuf), "Mutu  : %s", qStr);
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
@@ -311,20 +311,20 @@ static void drawMeasurement() {
             dtostrf(s_view.temperature, 4, 1, tStr);
             char* p = tStr;
             while (*p == ' ') p++;
-            snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %s (%s C)",
-                     FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus), p);
+            snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %sC [%s]",
+                     p, FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus));
         } else {
             snprintf(lineBuf, sizeof(lineBuf), "Suhu  : ERROR");
         }
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
-        g_u8g2.drawStr(2, y, "Pesan :");
+        g_u8g2.drawStr(2, y, "Saran :");
         y += MENU_LINE_HEIGHT;
         const char* pesan = FuzzyKualitasAir_GetPesan(s_view.qualityStatus);
         drawWrappedText(4, y, pesan);
 
-        display_drawStatusBar("[UP] Dashboard", "[BACK] Menu");
+        display_drawStatusBar("UP:Kembali", "BACK:Menu");
     }
 }
 
@@ -332,9 +332,9 @@ static void drawCalibration() {
     drawSimpleList("Kalibrasi Sensor", CALIBRATION_ITEMS, CALIBRATION_ITEM_COUNT,
                    s_viewState.cursorIndex);
     if (s_viewState.calibSaving) {
-        display_drawStatusBar("Menyimpan ke Flash...", nullptr);
+        display_drawStatusBar("Menyimpan...", nullptr);
     } else {
-        display_drawStatusBar("Pilih sensor, Tekan OK", "[BACK] Menu");
+        display_drawStatusBar("OK:Pilih", "BACK:Menu");
     }
 }
 
@@ -364,7 +364,7 @@ static void drawCalibrationSub() {
             } else {
                 g_u8g2.drawStr(2, y, "UP/DN:Target OK:Simpan");
             }
-            display_drawStatusBar("Celupkan ke larutan standar", "[BACK] Batal");
+            display_drawStatusBar("UP/DN:Ubah", "BACK:Batal");
             break;
         }
 
@@ -390,7 +390,7 @@ static void drawCalibrationSub() {
             } else {
                 g_u8g2.drawStr(2, y, "Tekan OK: Lock 0 NTU");
             }
-            display_drawStatusBar("Air Aquades (0 NTU)", "[BACK] Batal");
+            display_drawStatusBar("Air Aquades", "BACK:Batal");
             break;
         }
 
@@ -416,7 +416,7 @@ static void drawCalibrationSub() {
             } else {
                 g_u8g2.drawStr(2, y, "LF/RT:Offset OK:Simpan");
             }
-            display_drawStatusBar("Samakan dgn termometer", "[BACK] Batal");
+            display_drawStatusBar("LF/RT:Ubah", "BACK:Batal");
             break;
         }
 
@@ -447,7 +447,11 @@ static void drawSettings() {
             g_u8g2.drawStr(100, y, valueBuf);
         }
     }
-    display_drawStatusBar("Pilih item, Tekan OK", "[BACK] Menu");
+    if (s_viewState.settingsAdjustMode) {
+        display_drawStatusBar("LF/RT:Ubah", "OK:Selesai");
+    } else {
+        display_drawStatusBar("OK:Atur", "BACK:Menu");
+    }
 }
 
 static void drawAbout() {
@@ -476,7 +480,7 @@ static void drawAbout() {
              static_cast<unsigned long>(xPortGetFreeHeapSize()));
     g_u8g2.drawStr(2, y, line);
 
-    display_drawStatusBar("Tekan BACK untuk kembali", nullptr);
+    display_drawStatusBar("Info Sistem", "BACK:Menu");
 }
 
 // =============================================================================

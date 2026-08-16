@@ -161,61 +161,61 @@ static void taskSerialDebug(void* /* pvParameters */) {
             xSemaphoreGive(g_dataMutex);
         }
 
-        Serial1.println(F("---- Water Quality Analyzer Debug ----"));
+        Serial.println(F("---- Water Quality Analyzer Debug ----"));
 
-        Serial1.print(F("Temperature   : "));
-        Serial1.print(sensorSnapshot.temperature);
-        Serial1.println(F(" C"));
+        Serial.print(F("Temperature   : "));
+        Serial.print(sensorSnapshot.temperature);
+        Serial.println(F(" C"));
 
-        Serial1.print(F("TDS Raw/Flt   : "));
-        Serial1.print(sensorSnapshot.tdsRaw);
-        Serial1.print(F(" / "));
-        Serial1.println(sensorSnapshot.tdsFiltered);
+        Serial.print(F("TDS Raw/Flt   : "));
+        Serial.print(sensorSnapshot.tdsRaw);
+        Serial.print(F(" / "));
+        Serial.println(sensorSnapshot.tdsFiltered);
 
-        Serial1.print(F("Turb Raw/Flt  : "));
-        Serial1.print(sensorSnapshot.turbidityRaw);
-        Serial1.print(F(" / "));
-        Serial1.println(sensorSnapshot.turbidityFiltered);
+        Serial.print(F("Turb Raw/Flt  : "));
+        Serial.print(sensorSnapshot.turbidityRaw);
+        Serial.print(F(" / "));
+        Serial.println(sensorSnapshot.turbidityFiltered);
 
-        Serial1.print(F("TDS Comp      : "));
-        Serial1.println(sensorSnapshot.tdsCompensated);
+        Serial.print(F("TDS Comp      : "));
+        Serial.println(sensorSnapshot.tdsCompensated);
 
-        Serial1.print(F("Fuzzy Skor    : "));
-        Serial1.print(sensorSnapshot.fuzzyScore, 2);
-        Serial1.print(F(" ["));
-        Serial1.print(FuzzyKualitasAir_GetStatusBadge(sensorSnapshot.qualityStatus));
-        Serial1.print(F(" - "));
-        Serial1.print(FuzzyKualitasAir_GetPesan(sensorSnapshot.qualityStatus));
-        Serial1.println(F("]"));
+        Serial.print(F("Fuzzy Skor    : "));
+        Serial.print(sensorSnapshot.fuzzyScore, 2);
+        Serial.print(F(" ["));
+        Serial.print(FuzzyKualitasAir_GetStatusBadge(sensorSnapshot.qualityStatus));
+        Serial.print(F(" - "));
+        Serial.print(FuzzyKualitasAir_GetPesan(sensorSnapshot.qualityStatus));
+        Serial.println(F("]"));
 
-        Serial1.print(F("Buttons P/R/H : "));
+        Serial.print(F("Buttons P/R/H : "));
         for (uint8_t i = 0; i < static_cast<uint8_t>(ButtonID::COUNT); i++) {
-            Serial1.print(buttonSnapshot[i].pressed ? '1' : '0');
+            Serial.print(buttonSnapshot[i].pressed ? '1' : '0');
         }
-        Serial1.print(' ');
+        Serial.print(' ');
         for (uint8_t i = 0; i < static_cast<uint8_t>(ButtonID::COUNT); i++) {
-            Serial1.print(buttonSnapshot[i].hold ? '1' : '0');
+            Serial.print(buttonSnapshot[i].hold ? '1' : '0');
         }
-        Serial1.println();
+        Serial.println();
 
-        Serial1.print(F("Menu Aktif    : "));
-        Serial1.println(menuNames[static_cast<uint8_t>(menuSnapshot)]);
+        Serial.print(F("Menu Aktif    : "));
+        Serial.println(menuNames[static_cast<uint8_t>(menuSnapshot)]);
 
         // Stack high water mark: byte tersisa terendah (paling kecil)
-        Serial1.print(F("Stack Min (B) : "));
+        Serial.print(F("Stack Min (B) : "));
         for (uint8_t i = 0; i < 6; i++) {
             if (s_handles[i] != nullptr) {
-                Serial1.print(s_taskNames[i]);
-                Serial1.print('=');
-                Serial1.print(uxTaskGetStackHighWaterMark(s_handles[i]));
-                Serial1.print(' ');
+                Serial.print(s_taskNames[i]);
+                Serial.print('=');
+                Serial.print(uxTaskGetStackHighWaterMark(s_handles[i]));
+                Serial.print(' ');
             }
         }
-        Serial1.println();
+        Serial.println();
 
-        Serial1.print(F("Free Heap     : "));
-        Serial1.print(xPortGetFreeHeapSize());
-        Serial1.println(F(" bytes"));
+        Serial.print(F("Free Heap     : "));
+        Serial.print(xPortGetFreeHeapSize());
+        Serial.println(F(" bytes"));
 
         vTaskDelayUntil(&lastWakeTime, period);
     }

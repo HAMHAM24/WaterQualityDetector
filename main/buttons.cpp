@@ -28,11 +28,47 @@ struct ButtonRuntime {
 
 static ButtonRuntime s_buttons[static_cast<uint8_t>(ButtonID::COUNT)];
 
+static const char* buttonName(ButtonID id) {
+    switch (id) {
+        case ButtonID::UP:    return "UP";
+        case ButtonID::DOWN:  return "DOWN";
+        case ButtonID::LEFT:  return "LEFT";
+        case ButtonID::RIGHT: return "RIGHT";
+        case ButtonID::OK:    return "OK";
+        case ButtonID::BACK:  return "BACK";
+        default:              return "UNKNOWN";
+    }
+}
+
+static const char* pinName(ButtonID id) {
+    switch (id) {
+        case ButtonID::UP:    return "PB14";
+        case ButtonID::DOWN:  return "PA8";
+        case ButtonID::LEFT:  return "PB15";
+        case ButtonID::RIGHT: return "PB13";
+        case ButtonID::OK:    return "PB12";
+        case ButtonID::BACK:  return "PB11";
+        default:              return "??";
+    }
+}
+
 /**
  * @brief Mengirim satu event tombol ke queue dan memperbarui ButtonState
  *        ringkas untuk keperluan debug.
  */
 static void emitEvent(ButtonID id, ButtonEvent event) {
+    // --- REAL-TIME BUTTON SERIAL DEBUG LOGGER ---
+    if (event == ButtonEvent::PRESSED) {
+        Serial.print(F(">>> [BTN PRESS]   "));
+        Serial.print(buttonName(id));
+        Serial.print(F("\t(Pin "));
+        Serial.print(pinName(id));
+        Serial.println(F(")"));
+    } else if (event == ButtonEvent::RELEASED) {
+        Serial.print(F(">>> [BTN RELEASE] "));
+        Serial.println(buttonName(id));
+    }
+
     ButtonEventMsg msg{id, event};
     // Non-blocking: jika queue penuh, event terlama akan tetap diproses
     // lebih dulu oleh consumer; kita tidak menunggu (xTicksToWait = 0)

@@ -45,7 +45,7 @@ Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-
 ```text
 [STM32F401CCU6 (Blackpill)]
    |-- EEPROM Flash Memory -> Penyimpanan Permanen Parameter Kalibrasi
-   |-- UART Serial1 (PA_9 RX / PA_10 TX) -> Telemetri & Log Validasi (115200 baud)
+   |-- UART Serial (PA_9 TX / PA_10 RX) -> Telemetri & Log Validasi (115200 baud)
    |-- I2C (PB_8 SCL / PB_9 SDA) -> OLED SSD1306 128x64
    |-- OneWire (PB_10) -> DS18B20 Temp Sensor
    |-- ADC CH0 (PA_0) -> TDS Analog Sensor
@@ -75,18 +75,18 @@ Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-
 
 | Fungsi | Pin MCU | Catatan Hardware |
 |---|---|---|
-| **UART RX** | `PA_9` | FTDI TX -> MCU RX |
-| **UART TX** | `PA_10` | FTDI RX -> MCU TX |
+| **UART TX** | `PA_9` | MCU TX -> FTDI RX |
+| **UART RX** | `PA_10` | MCU RX <- FTDI TX |
 | **OLED SCL** | `PB_8` | Hardware I2C SCL |
 | **OLED SDA** | `PB_9` | Hardware I2C SDA |
 | **DS18B20 Data** | `PB_10` | OneWire Data (Pull-up 4.7kΩ) |
 | **TDS Analog** | `PA_0` | ADC Channel 0 (12-bit) |
 | **Turbidity Analog** | `PA_1` | ADC Channel 1 (12-bit) |
-| **BTN UP** | `PB_12` | Active LOW (`INPUT_PULLUP`) |
-| **BTN DOWN** | `PB_13` | Active LOW (`INPUT_PULLUP`) |
-| **BTN LEFT** | `PB_14` | Active LOW (`INPUT_PULLUP`) |
-| **BTN RIGHT** | `PB_15` | Active LOW (`INPUT_PULLUP`) |
-| **BTN OK** | `PA_8` | Active LOW (`INPUT_PULLUP`) |
+| **BTN UP** | `PB_14` | Active LOW (`INPUT_PULLUP`) |
+| **BTN DOWN** | `PA_8` | Active LOW (`INPUT_PULLUP`) |
+| **BTN LEFT** | `PB_15` | Active LOW (`INPUT_PULLUP`) |
+| **BTN RIGHT** | `PB_13` | Active LOW (`INPUT_PULLUP`) |
+| **BTN OK** | `PB_12` | Active LOW (`INPUT_PULLUP`) |
 | **BTN BACK** | `PB_11` | Active LOW (`INPUT_PULLUP`) |
 
 ---
@@ -111,7 +111,7 @@ Firmware menggunakan arsitektur *preemptive multitasking* dengan 6 task independ
 3. **TaskOled** (Periode: 100 ms | Prioritas: 2 | Stack: 512w): Menggambar ulang layar OLED via U8g2 hanya saat `displayDirty == true`. Seluruh format float memakai `dtostrf()`.
 4. **TaskWater** (Periode: 200 ms | Prioritas: 2 | Stack: 256w): Sampling ADC, konversi rantai lengkap ke satuan fisik (ADC→Volt→ppm TDS, Volt→NTU), filter moving average, eksekusi penulisan flash yang tertunda (`storage_processPendingSave()`), dan evaluasi Fuzzy Logic Engine.
 5. **TaskTemp** (Periode: 1000 ms | Prioritas: 1 | Stack: 192w): Konversi DS18B20 non-blocking (menunggu 750ms secara kooperatif).
-6. **TaskDebug** (Periode: 1000 ms | Prioritas: 1 | Stack: 352w): Mengirim log telemetri sistem, pembacaan sensor, dan **stack high water mark** seluruh task ke UART `Serial1` (115200 baud).
+6. **TaskDebug** (Periode: 1000 ms | Prioritas: 1 | Stack: 352w): Mengirim log telemetri sistem, pembacaan sensor, dan **stack high water mark** seluruh task ke UART `Serial` (115200 baud).
 
 **Catatan keamanan penulisan Flash:** STM32F401CCU6 TIDAK memiliki EEPROM sejati.
 Penulisan kalibrasi menggunakan API buffer EEPROM emulation agar satu siklus
@@ -362,7 +362,7 @@ Menampilkan spesifikasi firmware, MCU, dan penggunaan RAM secara *real-time*.
 
 ## 10. Pengujian & Validasi Baseline
 
-Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` akan mengeksekusi uji coba validasi otomatis 1x pada `Serial1`:
+Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` akan mengeksekusi uji coba validasi otomatis 1x pada `Serial`:
 
 ```text
 ========================================

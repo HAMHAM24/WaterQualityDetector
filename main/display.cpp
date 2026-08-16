@@ -62,10 +62,23 @@ void display_drawStatusBar(const char* leftText, const char* rightText) {
     g_u8g2.drawHLine(0, barY, DISPLAY_WIDTH);
 
     g_u8g2.setFont(u8g2_font_5x7_tf);
-    g_u8g2.drawStr(2, DISPLAY_HEIGHT - 1, leftText);
 
-    if (rightText != nullptr) {
-        uint8_t textWidth = g_u8g2.getStrWidth(rightText);
-        g_u8g2.drawStr(DISPLAY_WIDTH - textWidth - 2, DISPLAY_HEIGHT - 1, rightText);
+    if (rightText != nullptr && rightText[0] != '\0') {
+        uint8_t rightWidth = g_u8g2.getStrWidth(rightText);
+        uint8_t rightX = (DISPLAY_WIDTH > (rightWidth + 2)) ? (DISPLAY_WIDTH - rightWidth - 2) : 0;
+        g_u8g2.drawStr(rightX, DISPLAY_HEIGHT - 1, rightText);
+
+        if (leftText != nullptr) {
+            uint8_t maxLeftWidth = (rightX > 6) ? (rightX - 6) : 0;
+            char buf[32];
+            strncpy(buf, leftText, sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            while (strlen(buf) > 0 && g_u8g2.getStrWidth(buf) > maxLeftWidth) {
+                buf[strlen(buf) - 1] = '\0';
+            }
+            g_u8g2.drawStr(2, DISPLAY_HEIGHT - 1, buf);
+        }
+    } else if (leftText != nullptr) {
+        g_u8g2.drawStr(2, DISPLAY_HEIGHT - 1, leftText);
     }
 }
