@@ -22,6 +22,21 @@ constexpr const char* FIRMWARE_NAME     = "Water Quality Analyzer";
 constexpr const char* FIRMWARE_VERSION  = "1.0.0";
 constexpr const char* HARDWARE_VERSION  = "Rev-A (Blackpill F401CCU6)";
 constexpr const char* MCU_NAME          = "STM32F401CCU6";
+constexpr const char* DISPLAY_NAME      = "OLED 1.3\" SH1106";
+
+// =============================================================================
+// PEMILIHAN CONTROLLER OLED
+// -----------------------------------------------------------------------------
+// Modul OLED 1.3 inci di pasaran mayoritas memakai controller SH1106, bukan
+// SSD1306. SH1106 memiliki RAM 132x64 (offset 2 px) sehingga bila dipaksa
+// memakai driver SSD1306 tampilan akan bergeser 2 piksel dan muncul garis
+// sampah di tepi kiri/kanan.
+//
+// Ubah SATU baris di bawah bila modul Anda ternyata SSD1306 1.3 inci:
+//   1 = SH1106  (default, untuk OLED 1.3")
+//   0 = SSD1306 (untuk OLED 0.96")
+// =============================================================================
+#define OLED_USE_SH1106  1
 
 // =============================================================================
 // PIN MAPPING — UART (FTDI / Serial Monitor)
@@ -47,10 +62,11 @@ constexpr uint8_t PIN_TURBIDITY_ANALOG = PA_1; // SEN0189 analog
 // =============================================================================
 constexpr uint8_t PIN_BTN_UP    = PB_14;
 constexpr uint8_t PIN_BTN_DOWN  = PA_8;
-constexpr uint8_t PIN_BTN_LEFT  = PB_15;
+constexpr uint8_t PIN_BTN_LEFT  = PB_0;   // dipindah dari PB_15
 constexpr uint8_t PIN_BTN_RIGHT = PB_13;
 constexpr uint8_t PIN_BTN_OK    = PB_12;
 constexpr uint8_t PIN_BTN_BACK  = PB_11;
+// Catatan: PB_15 kini bebas / tidak terpakai (cadangan untuk pengembangan).
 
 constexpr uint8_t BUTTON_COUNT = 6;
 
@@ -150,7 +166,13 @@ constexpr float TEMP_OFFSET_LIMIT   = 5.0f;   // batas +/- offset yang diizinkan
 //              tdsTinggi_a, tdsTinggi_b, tdsTinggi_c
 //   Turbidity: turbJernih_b, turbJernih_c, turbSedang_a, turbSedang_b, turbSedang_c,
 //              turbKeruh_a, turbKeruh_b, turbKeruh_c
+//   Suhu:      tempDingin_b, tempDingin_c, tempNormal_a, tempNormal_b,
+//              tempNormal_c, tempPanas_a, tempPanas_b, tempPanas_c
 //   Thresholds: threshExcellent, threshGood, threshPoor, threshVeryPoor
+//
+// Parameter SUHU sengaja dibuat identik pada kedua profil karena zona suhu
+// nyaman air (Dingin <=24, Normal 24-32, Panas >=32) bersifat universal dan
+// tidak bergantung peruntukan air.
 // =============================================================================
 constexpr uint8_t WATER_PROFILE_COUNT = 2;
 
@@ -160,9 +182,15 @@ constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
         150.0f, 300.0f,
         150.0f, 500.0f, 1000.0f,
         500.0f, 1000.0f, 1200.0f,
+
         1.5f, 3.0f,
         1.5f, 10.0f, 25.0f,
         10.0f, 25.0f, 30.0f,
+
+        24.0f, 28.0f,
+        24.0f, 28.0f, 32.0f,
+        28.0f, 32.0f, 40.0f,
+
         0.875f, 0.625f, 0.375f, 0.125f
     },
 
@@ -171,20 +199,30 @@ constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
         100.0f, 200.0f,
         100.0f, 300.0f, 500.0f,
         300.0f, 500.0f, 700.0f,
+
         0.2f, 0.5f,
         0.2f, 0.5f, 1.5f,
         0.5f, 1.5f, 3.0f,
+
+        24.0f, 28.0f,
+        24.0f, 28.0f, 32.0f,
+        28.0f, 32.0f, 40.0f,
+
         0.875f, 0.625f, 0.375f, 0.125f
     }
 };
 
 // =============================================================================
-// DISPLAY OLED SSD1306 128x64
+// DISPLAY OLED 1.3" SH1106 128x64
+// -----------------------------------------------------------------------------
+// Resolusi tetap 128x64 (sama dengan 0.96"), namun karena piksel fisik pada
+// panel 1.3 inci lebih besar, font dinaikkan satu tingkat dan tinggi zona
+// header/status bar diperbesar agar proporsi tampilan tetap enak dibaca.
 // =============================================================================
 constexpr uint8_t DISPLAY_WIDTH       = 128;
 constexpr uint8_t DISPLAY_HEIGHT      = 64;
-constexpr uint8_t DISPLAY_HEADER_H    = 12;   // tinggi area header (judul halaman)
-constexpr uint8_t DISPLAY_STATUSBAR_H = 8;    // tinggi area status bar bawah
+constexpr uint8_t DISPLAY_HEADER_H    = 13;   // tinggi area header (judul halaman)
+constexpr uint8_t DISPLAY_STATUSBAR_H = 10;   // tinggi area status bar bawah
 
 constexpr uint8_t DISPLAY_DEFAULT_CONTRAST   = 128; // 0-255
 constexpr uint8_t DISPLAY_DEFAULT_BRIGHTNESS = 200; // 0-255 (khusus SSD1306: setContrast juga)
@@ -241,14 +279,18 @@ constexpr uint16_t STACK_SIZE_SERIAL_DEBUG  = 352;
 // =============================================================================
 // TATA LETAK DAFTAR MENU (dipakai gui.cpp)
 // -----------------------------------------------------------------------------
-// Area konten = tinggi layar - header - status bar = 64 - 12 - 8 = 44 px.
-// Dengan lineHeight 11 px, hanya 4 baris yang benar-benar terlihat. Menu
-// dengan item lebih banyak WAJIB memakai viewport bergulir, jika tidak item
-// terakhir tidak akan pernah tergambar.
+// Area konten = tinggi layar - header - status bar = 64 - 13 - 10 = 41 px.
+// Dengan lineHeight 10 px, tepat 4 baris terlihat (4 x 10 = 40 px <= 41 px).
+// Menu dengan item lebih banyak WAJIB memakai viewport bergulir, jika tidak
+// item terakhir tidak akan pernah tergambar.
+//
+// MENU_LAST_LINE_Y = batas baseline terbawah yang masih aman digambar tanpa
+// menabrak garis status bar.
 // =============================================================================
-constexpr uint8_t MENU_LINE_HEIGHT    = 11;
+constexpr uint8_t MENU_LINE_HEIGHT    = 10;
 constexpr uint8_t MENU_VISIBLE_ROWS   = 4;
-constexpr uint8_t MENU_FIRST_LINE_Y   = DISPLAY_HEADER_H + 9;
+constexpr uint8_t MENU_FIRST_LINE_Y   = DISPLAY_HEADER_H + 8;   // = 21
+constexpr uint8_t MENU_LAST_LINE_Y    = DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H - 1; // = 53
 
 // =============================================================================
 // LAIN-LAIN

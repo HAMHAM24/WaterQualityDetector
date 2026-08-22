@@ -31,37 +31,48 @@ void setup() {
     display_init();
     gui_init();
 
-    // --- TEST VALIDASI BASELINE (TDS=350, Turb=10 → 0.50 [Poor]) ---
+    // --- TEST VALIDASI BASELINE (TDS=350, Turb=10, Suhu=28) ---
     float testTds = 350.0f;
     float testTurb = 10.0f;
-    float testSkor = FuzzyKualitasAir_HitungSkor(testTds, testTurb);
+    float testSuhu = 28.0f;
+    float testSkor = FuzzyKualitasAir_HitungSkor(testTds, testTurb, testSuhu);
     KualitasAir_t testStatus = FuzzyKualitasAir_GetStatus(testSkor);
 
     Serial.println(F("========================================"));
     Serial.println(F("    VALIDASI AUTOMATIS FUZZY LOGIC    "));
+    Serial.println(F("  3 INPUT: TDS + Turbidity + Suhu     "));
     Serial.println(F("========================================"));
-    Serial.print(F("Input Test  : TDS = 350.0 ppm, Turbidity = 10.0 NTU\n"));
-    Serial.print(F("Hasil Skor  : ")); Serial.println(testSkor, 2);
-    Serial.print(F("Status Badge: ")); Serial.println(FuzzyKualitasAir_GetStatusBadge(testStatus));
-    Serial.print(F("Status Pesan: ")); Serial.println(FuzzyKualitasAir_GetPesan(testStatus));
-    Serial.println(F("========================================"));
-
-    // Test kasus ekstrem: air jernih ideal → harus EXCELLENT (1.00).
-    float testSkorLayak = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f);
-    KualitasAir_t statusLayak = FuzzyKualitasAir_GetStatus(testSkorLayak);
-    Serial.print(F("Air Jernih (50 ppm, 0.5 NTU): "));
-    Serial.print(testSkorLayak, 2);
-    Serial.print(F(" ["));
-    Serial.print(FuzzyKualitasAir_GetStatusBadge(statusLayak));
+    Serial.print(F("Input  : TDS=350 Turb=10 Suhu=28C\n"));
+    Serial.print(F("Skor   : ")); Serial.print(testSkor, 2);
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(testStatus));
     Serial.println(F("]"));
 
-    // Test kasus ekstrem: air buruk → harus NOT_SUITABLE (0.00).
-    float testSkorBuruk = FuzzyKualitasAir_HitungSkor(1100.0f, 28.0f);
-    KualitasAir_t statusBuruk = FuzzyKualitasAir_GetStatus(testSkorBuruk);
-    Serial.print(F("Air Buruk (1100 ppm, 28 NTU): "));
-    Serial.print(testSkorBuruk, 2);
-    Serial.print(F(" ["));
-    Serial.print(FuzzyKualitasAir_GetStatusBadge(statusBuruk));
+    // Test 1: air jernih ideal + suhu normal → harus EXCELLENT
+    float s1 = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f, 28.0f);
+    Serial.print(F("Ideal   (50/0.5/28C): "));
+    Serial.print(s1, 2);
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s1)));
+    Serial.println(F("]"));
+
+    // Test 2: air jernih ideal + dingin → harus GOOD (penalti suhu)
+    float s2 = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f, 22.0f);
+    Serial.print(F("Dingin  (50/0.5/22C): "));
+    Serial.print(s2, 2);
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s2)));
+    Serial.println(F("]"));
+
+    // Test 3: air jernih ideal + panas → harus GOOD (penalti suhu)
+    float s3 = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f, 34.0f);
+    Serial.print(F("Panas   (50/0.5/34C): "));
+    Serial.print(s3, 2);
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s3)));
+    Serial.println(F("]"));
+
+    // Test 4: air buruk → harus NOT_SUITABLE
+    float s4 = FuzzyKualitasAir_HitungSkor(1100.0f, 28.0f, 28.0f);
+    Serial.print(F("Buruk   (1100/28/28C): "));
+    Serial.print(s4, 2);
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s4)));
     Serial.println(F("]"));
     Serial.println(F("========================================"));
 

@@ -1,7 +1,10 @@
 /**
  * @file    display.cpp
- * @brief   Implementasi Display Manager untuk OLED SSD1306 128x64 via I2C
- *          pada pin custom PB8(SCL)/PB9(SDA), menggunakan library U8g2.
+ * @brief   Implementasi Display Manager untuk OLED 1.3" 128x64 via I2C pada
+ *          pin custom PB8(SCL)/PB9(SDA), menggunakan library U8g2.
+ * @details Controller default SH1106 (OLED 1.3"). Ukuran font header dan
+ *          status bar dinaikkan satu tingkat dibanding versi 0.96" agar
+ *          proporsi teks pada panel yang lebih besar tetap enak dibaca.
  */
 
 #include "display.h"
@@ -11,7 +14,7 @@
 // Full buffer mode (_F_) dipilih agar penggambaran header + konten +
 // status bar dapat digabung dalam satu sendBuffer() tanpa kedip,
 // mengorbankan ~1 KB RAM yang masih sangat aman untuk STM32F401 (64 KB SRAM).
-U8G2_SSD1306_128X64_NONAME_F_HW_I2C g_u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
+OledDriver_t g_u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
 /**
  * @brief Inisialisasi bus I2C dengan remap pin custom lalu OLED.
@@ -20,7 +23,7 @@ void display_init() {
     Wire.setSCL(PIN_OLED_SCL);
     Wire.setSDA(PIN_OLED_SDA);
     Wire.begin();
-    Wire.setClock(400000);  // SSD1306 mendukung fast-mode I2C (400 kHz)
+    Wire.setClock(400000);  // SH1106/SSD1306 mendukung fast-mode I2C (400 kHz)
 
     g_u8g2.begin();
     g_u8g2.setContrast(DISPLAY_DEFAULT_CONTRAST);
@@ -36,10 +39,10 @@ void display_setContrast(uint8_t level) {
 }
 
 /**
- * @brief Mengatur brightness. SSD1306 tidak memiliki kontrol brightness
- *        terpisah dari contrast, sehingga nilai brightness dipetakan
- *        langsung ke register contrast agar perilaku tetap intuitif
- *        bagi pengguna di menu Pengaturan.
+ * @brief Mengatur brightness. SH1106/SSD1306 tidak memiliki kontrol
+ *        brightness terpisah dari contrast, sehingga nilai brightness
+ *        dipetakan langsung ke register contrast agar perilaku tetap
+ *        intuitif bagi pengguna di menu Pengaturan.
  */
 void display_setBrightness(uint8_t level) {
     g_u8g2.setContrast(level);
@@ -47,26 +50,33 @@ void display_setBrightness(uint8_t level) {
 
 /**
  * @brief Menggambar header berisi judul halaman dengan garis pemisah.
+ *        Font bold 7x13 dipilih agar judul tetap tegas terbaca pada
+ *        panel 1.3 inci. Baseline y=10 menyisakan 2 px sebelum garis.
  */
 void display_drawHeader(const char* title) {
-    g_u8g2.setFont(u8g2_font_6x10_tf);
-    g_u8g2.drawStr(2, 9, title);
+    g_u8g2.setFont(u8g2_font_7x13B_tf);
+    g_u8g2.drawStr(2, 10, title);
     g_u8g2.drawHLine(0, DISPLAY_HEADER_H - 1, DISPLAY_WIDTH);
 }
 
 /**
- * @brief Menggambar status bar bawah dengan teks kiri dan kanan (opsional).
+ * @brief Menggambar status bar bawah dengan teks kiri dan teks kanan
+ *        (opsional). Bila keduanya diisi, teks kiri dipangkas otomatis
+ *        agar tidak menabrak teks kanan.
  */
 void display_drawStatusBar(const char* leftText, const char* rightText) {
     const uint8_t barY = DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H;
     g_u8g2.drawHLine(0, barY, DISPLAY_WIDTH);
 
-    g_u8g2.setFont(u8g2_font_5x7_tf);
+    // Font 6x10 (naik dari 5x7) agar keterangan tombol tetap terbaca.
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    const uint8_t textY = DISPLAY_HEIGHT - 1;
 
     if (rightText != nullptr && rightText[0] != '\0') {
         uint8_t rightWidth = g_u8g2.getStrWidth(rightText);
-        uint8_t rightX = (DISPLAY_WIDTH > (rightWidth + 2)) ? (DISPLAY_WIDTH - rightWidth - 2) : 0;
-        g_u8g2.drawStr(rightX, DISPLAY_HEIGHT - 1, rightText);
+        uint8_t rightX = (DISPLAY_WIDTH > (rightWidth + 2))
+                             ? (DISPLAY_WIDTH - rightWidth - 2) : 0;
+        g_u8g2.drawStr(rightX, textY, rightText);
 
         if (leftText != nullptr) {
             uint8_t maxLeftWidth = (rightX > 6) ? (rightX - 6) : 0;
@@ -76,9 +86,9 @@ void display_drawStatusBar(const char* leftText, const char* rightText) {
             while (strlen(buf) > 0 && g_u8g2.getStrWidth(buf) > maxLeftWidth) {
                 buf[strlen(buf) - 1] = '\0';
             }
-            g_u8g2.drawStr(2, DISPLAY_HEIGHT - 1, buf);
+            g_u8g2.drawStr(2, textY, buf);
         }
     } else if (leftText != nullptr) {
-        g_u8g2.drawStr(2, DISPLAY_HEIGHT - 1, leftText);
+        g_u8g2.drawStr(2, textY, leftText);
     }
 }

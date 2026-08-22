@@ -285,7 +285,8 @@ void sensors_processFuzzy() {
     const float tdsComp = tdsSnapshot;
 
     const FuzzyProfil_t* profil = globals_getProfile(activeParam);
-    const float skor = FuzzyKualitasAir_HitungSkorProfil(profil, tdsComp, turbSnapshot);
+    const float suhuForFuzzy = tempValid ? tempSnapshot : FuzzyKualitasAir_SuhuNetral();
+    const float skor = FuzzyKualitasAir_HitungSkorProfil(profil, tdsComp, turbSnapshot, suhuForFuzzy);
     const KualitasAir_t qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
     const StatusSuhu_t tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(tempSnapshot)
                                             : SUHU_NORMAL;

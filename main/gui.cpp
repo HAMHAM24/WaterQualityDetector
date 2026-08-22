@@ -6,7 +6,11 @@
  *          Detail Rekomendasi (2/2) -> BACK ke Menu Utama.
  *
  *          Pola snapshot thread-safe: gui_draw() mengambil salinan data di
- *          bawah g_dataMutex sebelum merender layar OLED SSD1306.
+ *          bawah g_dataMutex sebelum merender layar OLED 1.3" (SH1106).
+ *
+ *          Tata letak mengikuti konstanta di config.h:
+ *            header 13 px + konten 41 px + status bar 10 px = 64 px
+ *            MENU_LINE_HEIGHT 10 px, baris pertama y = 21, terakhir y = 53.
  */
 
 #include "gui.h"
@@ -122,11 +126,10 @@ static void drawSimpleList(const char* title, const char* const* items,
 
     // Indikator scroll
     if (firstVisible > 0) {
-        g_u8g2.drawStr(120, MENU_FIRST_LINE_Y, "^");
+        g_u8g2.drawStr(121, MENU_FIRST_LINE_Y, "^");
     }
     if (count > firstVisible + MENU_VISIBLE_ROWS) {
-        g_u8g2.drawStr(120, static_cast<uint8_t>(
-            DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H - 1), "v");
+        g_u8g2.drawStr(121, MENU_LAST_LINE_Y, "v");
     }
 }
 
@@ -136,15 +139,15 @@ static void drawSplash() {
     static const char* const titleLine2 = "Quality Index";
     static const char* const titleLine3 = "FBN";
 
-    g_u8g2.setFont(u8g2_font_7x14B_tf);
-    g_u8g2.drawStr(centeredX(titleLine1), 20, titleLine1);
-    g_u8g2.drawStr(centeredX(titleLine2), 35, titleLine2);
+    g_u8g2.setFont(u8g2_font_8x13B_tf);
+    g_u8g2.drawStr(centeredX(titleLine1), 19, titleLine1);
+    g_u8g2.drawStr(centeredX(titleLine2), 34, titleLine2);
     g_u8g2.drawStr(centeredX(titleLine3), 49, titleLine3);
 
-    g_u8g2.setFont(u8g2_font_5x7_tf);
+    g_u8g2.setFont(u8g2_font_6x10_tf);
     char versionLine[24];
     snprintf(versionLine, sizeof(versionLine), "v%s", FIRMWARE_VERSION);
-    g_u8g2.drawStr(centeredX(versionLine), 61, versionLine);
+    g_u8g2.drawStr(centeredX(versionLine), 62, versionLine);
 }
 
 /** @brief Menu Utama (Pemilihan Objek Air & Fitur) */
@@ -168,11 +171,11 @@ static void drawWaitingSampling() {
     if (elapsed > SAMPLING_SCREEN_MS) elapsed = SAMPLING_SCREEN_MS;
     float progress = static_cast<float>(elapsed) / static_cast<float>(SAMPLING_SCREEN_MS);
 
-    // Bingkai progress bar
-    constexpr uint8_t barX = 14;
-    constexpr uint8_t barY = 34;
-    constexpr uint8_t barW = 100;
-    constexpr uint8_t barH = 10;
+    // Bingkai progress bar (lebih lebar untuk panel 1.3")
+    constexpr uint8_t barX = 10;
+    constexpr uint8_t barY = 33;
+    constexpr uint8_t barW = 108;
+    constexpr uint8_t barH = 12;
     g_u8g2.drawFrame(barX, barY, barW, barH);
 
     // Isi progress bar
@@ -181,7 +184,14 @@ static void drawWaitingSampling() {
         g_u8g2.drawBox(barX + 2, barY + 2, fillW, barH - 4);
     }
 
-    display_drawStatusBar("Stabilisasi...", "BACK:Batal");
+    // Persentase di bawah bar
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    char pctBuf[8];
+    snprintf(pctBuf, sizeof(pctBuf), "%u%%",
+             static_cast<unsigned>(progress * 100.0f));
+    g_u8g2.drawStr(centeredX(pctBuf), 52, pctBuf);
+
+    display_drawStatusBar("Stabilisasi", "[BACK]");
 }
 
 /** @brief Mencetak satu baris nilai sensor dengan label dan satuan. */
@@ -456,7 +466,7 @@ static void drawSettings() {
 
 static void drawAbout() {
     display_drawHeader("Tentang Alat");
-    g_u8g2.setFont(u8g2_font_5x7_tf);
+    g_u8g2.setFont(u8g2_font_6x10_tf);
 
     char line[48];
     uint8_t y = MENU_FIRST_LINE_Y;
