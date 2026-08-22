@@ -144,9 +144,9 @@ constexpr uint16_t TDS_CALIB_TARGET_STEP    = 5;
 // oleh ADC (0-3.3 V setelah dikalikan divider). Nilai lama 4.1 V mustahil
 // tercapai sehingga air paling jernih pun selalu terbaca keruh.
 // =============================================================================
-constexpr float TURBIDITY_VCLEAR_DEFAULT = 3.0f;   // volt, wajar untuk air jernih
+constexpr float TURBIDITY_VCLEAR_DEFAULT = 3.3f;   // volt — sesuai saturasi ADC 3.3V
 constexpr float TURBIDITY_VCLEAR_MIN     = 0.5f;   // batas bawah nilai kalibrasi valid
-constexpr float TURBIDITY_NTU_PER_VOLT   = 200.0f; // slope konversi volt -> NTU
+constexpr float TURBIDITY_NTU_PER_VOLT   = 30.0f;  // slope: 30 NTU per 1 V (lebih landai)
 constexpr float TURBIDITY_NTU_MAX        = 30.0f;  // batas atas semesta fuzzy
 
 // =============================================================================

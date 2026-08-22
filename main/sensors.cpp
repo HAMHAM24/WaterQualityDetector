@@ -243,8 +243,7 @@ void sensors_updateTurbidity() {
     const float voltage = sensors_adcToVoltage(filteredRaw, TURBIDITY_INPUT_DIVIDER);
     const float ntu = sensors_voltageToNtu(voltage);
 
-    const SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
-                                                                   : SensorStatus::OK;
+    const SensorStatus status = (raw == 0) ? SensorStatus::ERROR : SensorStatus::OK;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         g_sensorData.turbidityRaw      = raw;

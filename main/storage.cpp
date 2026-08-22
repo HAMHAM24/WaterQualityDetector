@@ -111,6 +111,14 @@ void storage_init() {
     // Header valid, tetapi isinya tetap diperiksa.
     CalibrationParams before = g_calibParams;
     storage_clampParams(g_calibParams);
+
+    // Deteksi V_clear firmware lama: default lama 3.0V terlalu rendah untuk
+    // sensor 5V + ADC 3.3V. Jika masih di bawah 3.1V, paksa ke default baru
+    // supaya user dipaksa kalibrasi ulang setelah update firmware.
+    if (g_calibParams.turbidityVClear < 3.1f) {
+        g_calibParams.turbidityVClear = TURBIDITY_VCLEAR_DEFAULT;
+    }
+
     if (!paramsEqual(before, g_calibParams)) {
         s_pendingParams = g_calibParams;
         s_savePending = true;
