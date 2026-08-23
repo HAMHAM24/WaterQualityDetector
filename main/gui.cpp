@@ -1,16 +1,17 @@
 /**
  * @file    gui.cpp
  * @brief   Implementasi GUI Manager berbasis Finite State Machine (FSM).
- *          Alur Workflow: Splash (FBN) -> Menu Utama (Pilih Mode) ->
+ *          Alur Workflow: Splash (FBN) -> Menu Utama (Pilih Mode: 4 item) ->
  *          Screen Tunggu / Stabilisasi Sensor (5s) -> Dashboard Hasil (1/2) <->
  *          Detail Rekomendasi (2/2) -> BACK ke Menu Utama.
  *
- *          Pola snapshot thread-safe: gui_draw() mengambil salinan data di
- *          bawah g_dataMutex sebelum merender layar OLED 1.3" (SH1106).
+ *          Mode 1: Air Minum & Higiene -> Evaluasi Fuzzy Sugeno (3 Input)
+ *          Mode 2: Pemandian / Kolam   -> Threshold Check Langsung (Non-Fuzzy)
+ *          Mode 3: Kalibrasi Sensor    -> TDS, Turbidity, Suhu, Reset
+ *          Mode 4: Pengaturan OLED     -> Brightness, Kontras, Info
  *
- *          Tata letak mengikuti konstanta di config.h:
- *            header 13 px + konten 41 px + status bar 10 px = 64 px
- *            MENU_LINE_HEIGHT 10 px, baris pertama y = 21, terakhir y = 53.
+ *          Pola snapshot thread-safe: gui_draw() mengambil salinan data di
+ *          bawah g_dataMutex sebelum merender layar OLED 1.3" (SH1106 / SSD1306).
  */
 
 #include "gui.h"
@@ -21,16 +22,15 @@
 #include <stdio.h>
 
 // =============================================================================
-// KONSTANTA DAFTAR MENU
+// KONSTANTA DAFTAR MENU (4 ITEM UTAMA)
 // =============================================================================
 static const char* const HOME_ITEMS[] = {
-    "Air Minum",
-    "Higiene Sanitasi",
-    "Pemandian Umum",
+    "Air Minum & Higiene",
+    "Pemandian / Kolam",
     "Kalibrasi Sensor",
     "Pengaturan OLED"
 };
-static constexpr uint8_t HOME_ITEM_COUNT = 5;
+static constexpr uint8_t HOME_ITEM_COUNT = 4;
 
 static const char* const CALIBRATION_ITEMS[] = {
     "Kalibrasi TDS",
@@ -98,7 +98,7 @@ static uint8_t centeredX(const char* text) {
     return static_cast<uint8_t>((DISPLAY_WIDTH - textWidth) / 2);
 }
 
-/** @brief Viewport bergulir: 4 baris terlihat, kursor selalu dalam view. */
+/** @brief Viewport daftar menu: 4 baris muat penuh tanpa desak-desakan. */
 static void drawSimpleList(const char* title, const char* const* items,
                             uint8_t count, uint8_t cursor) {
     display_drawHeader(title);
@@ -127,7 +127,7 @@ static void drawSimpleList(const char* title, const char* const* items,
         g_u8g2.drawStr(11, y, items[i]);
     }
 
-    // Indikator scroll (kolom paling kanan)
+    // Indikator scroll (bila ada item di luar viewport)
     if (firstVisible > 0) {
         g_u8g2.drawStr(121, MENU_FIRST_LINE_Y, "^");
     }
@@ -142,48 +142,43 @@ static void drawSplash() {
     static const char* const titleLine2 = "Quality Index";
     static const char* const titleLine3 = "FBN";
 
-    // Font dinaikkan ke 8x13 bold agar mengisi panel 1.3" dengan tegas.
-    g_u8g2.setFont(u8g2_font_8x13B_tf);
-    g_u8g2.drawStr(centeredX(titleLine1), 19, titleLine1);
-    g_u8g2.drawStr(centeredX(titleLine2), 34, titleLine2);
-    g_u8g2.drawStr(centeredX(titleLine3), 49, titleLine3);
+    g_u8g2.setFont(u8g2_font_7x14B_tf);
+    g_u8g2.drawStr(centeredX(titleLine1), 18, titleLine1);
+    g_u8g2.drawStr(centeredX(titleLine2), 33, titleLine2);
+    g_u8g2.drawStr(centeredX(titleLine3), 47, titleLine3);
 
-    g_u8g2.setFont(u8g2_font_6x10_tf);
+    g_u8g2.setFont(u8g2_font_5x7_tf);
     char versionLine[24];
     snprintf(versionLine, sizeof(versionLine), "v%s", FIRMWARE_VERSION);
-    g_u8g2.drawStr(centeredX(versionLine), 62, versionLine);
+    g_u8g2.drawStr(centeredX(versionLine), 60, versionLine);
 }
 
 /** @brief Menu Utama (Pemilihan Objek Air & Fitur) */
 static void drawHome() {
     drawSimpleList("Pilih Mode Uji Air", HOME_ITEMS, HOME_ITEM_COUNT, s_viewState.cursorIndex);
-    display_drawStatusBar("UP/DN lalu OK", nullptr);
+    display_drawStatusBar("UP/DN:Pilih", "OK:Masuk");
 }
 
 /** @brief Screen Tunggu / Stabilisasi Pembacaan Sensor (5 Detik) */
 static void drawWaitingSampling() {
-    const char* modeTitle = "MODE:";
-    switch (s_viewState.activeParameter) {
-        case WaterParameter::AIR_MINUM: modeTitle = "MODE: AIR MINUM"; break;
-        case WaterParameter::HIGIENE_SANITASI: modeTitle = "MODE: HIGIENE SANITASI"; break;
-        case WaterParameter::PEMANDIAN_UMUM: modeTitle = "MODE: PEMANDIAN UMUM"; break;
-        default: break;
-    }
+    const char* modeTitle = (s_viewState.activeParameter == WaterParameter::AIR_MINUM_HIGIENE)
+                                ? "MODE: AIR MINUM"
+                                : "MODE: PEMANDIAN";
     display_drawHeader(modeTitle);
 
     g_u8g2.setFont(u8g2_font_6x10_tf);
-    g_u8g2.drawStr(10, 27, "Membaca Sensor...");
+    g_u8g2.drawStr(12, 26, "Membaca Sensor...");
 
     // Progress bar dinamis (durasi SAMPLING_SCREEN_MS = 5000 ms)
     uint32_t elapsed = millis() - s_samplingStartTick;
     if (elapsed > SAMPLING_SCREEN_MS) elapsed = SAMPLING_SCREEN_MS;
     float progress = static_cast<float>(elapsed) / static_cast<float>(SAMPLING_SCREEN_MS);
 
-    // Bingkai progress bar (lebih lebar & tebal untuk panel 1.3")
-    constexpr uint8_t barX = 10;
-    constexpr uint8_t barY = 33;
-    constexpr uint8_t barW = 108;
-    constexpr uint8_t barH = 12;
+    // Bingkai progress bar
+    constexpr uint8_t barX = 12;
+    constexpr uint8_t barY = 32;
+    constexpr uint8_t barW = 104;
+    constexpr uint8_t barH = 10;
     g_u8g2.drawFrame(barX, barY, barW, barH);
 
     // Isi progress bar
@@ -193,13 +188,12 @@ static void drawWaitingSampling() {
     }
 
     // Persentase di bawah bar
-    g_u8g2.setFont(u8g2_font_6x10_tf);
+    g_u8g2.setFont(u8g2_font_5x7_tf);
     char pctBuf[8];
-    snprintf(pctBuf, sizeof(pctBuf), "%u%%",
-             static_cast<unsigned>(progress * 100.0f));
-    g_u8g2.drawStr(centeredX(pctBuf), 52, pctBuf);
+    snprintf(pctBuf, sizeof(pctBuf), "%u%%", static_cast<unsigned>(progress * 100.0f));
+    g_u8g2.drawStr(centeredX(pctBuf), 51, pctBuf);
 
-    display_drawStatusBar("Stabilisasi", "[BACK]");
+    display_drawStatusBar("Stabilisasi...", "BACK:Batal");
 }
 
 /** @brief Mencetak satu baris nilai sensor dengan label dan satuan. */
@@ -266,23 +260,23 @@ static void drawWrappedText(uint8_t x, uint8_t y, const char* text) {
 
 /** @brief Dashboard Hasil Pengukuran & Detail Rekomendasi (Dual-Page View) */
 static void drawMeasurement() {
-    if (s_viewState.activeParameter == WaterParameter::PEMANDIAN_UMUM) {
+    if (s_viewState.activeParameter == WaterParameter::PEMANDIAN_KOLAM) {
         // =====================================================================
-        // MODE PEMANDIAN UMUM — EVALUASI THRESHOLD CHECKER (NON-FUZZY)
+        // MODE 2: PEMANDIAN / KOLAM — EVALUASI THRESHOLD CHECKER (NON-FUZZY)
         // =====================================================================
         if (s_viewState.measurementSubPage == 0) {
             // --- HALAMAN 1: DASHBOARD PER-PARAMETER ---
-            display_drawHeader("Pemandian (1/2)");
+            display_drawHeader("Pemandian/Kolam(1/2)");
             uint8_t y = MENU_FIRST_LINE_Y;
             g_u8g2.setFont(u8g2_font_6x10_tf);
 
-            // 1. Suhu
+            // 1. Suhu (16-35 C)
             char tempBuf[32];
             if (s_view.temperatureStatus == SensorStatus::OK) {
                 char tStr[8];
                 dtostrf(s_view.temperature, 4, 1, tStr);
                 char* p = tStr; while (*p == ' ') p++;
-                const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK LAYAK]";
+                const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK]";
                 snprintf(tempBuf, sizeof(tempBuf), "Suhu: %s C %s", p, sTag);
             } else {
                 snprintf(tempBuf, sizeof(tempBuf), "Suhu: ERROR");
@@ -290,13 +284,13 @@ static void drawMeasurement() {
             g_u8g2.drawStr(2, y, tempBuf);
             y += MENU_LINE_HEIGHT;
 
-            // 2. Turbidity
+            // 2. Turbidity (< 0.5 NTU)
             char turbBuf[32];
             if (s_view.turbidityStatus == SensorStatus::OK) {
                 char tbStr[8];
                 dtostrf(s_view.turbidityFiltered, 4, 1, tbStr);
                 char* p = tbStr; while (*p == ' ') p++;
-                const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK LAYAK]";
+                const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK]";
                 snprintf(turbBuf, sizeof(turbBuf), "Turb: %s NTU %s", p, tbTag);
             } else {
                 snprintf(turbBuf, sizeof(turbBuf), "Turb: ERROR");
@@ -323,45 +317,42 @@ static void drawMeasurement() {
             snprintf(stBuf, sizeof(stBuf), "Status: %s", allTag);
             g_u8g2.drawStr(2, y, stBuf);
 
-            display_drawStatusBar("[DN] Detail", "[BACK] Menu");
+            display_drawStatusBar("DN:Detail", "BACK:Menu");
 
         } else {
             // --- HALAMAN 2: DETAIL ACUAN & STATUS PER-PARAMETER ---
-            display_drawHeader("Pemandian (2/2)");
+            display_drawHeader("Pemandian/Kolam(2/2)");
             uint8_t y = MENU_FIRST_LINE_Y;
             g_u8g2.setFont(u8g2_font_6x10_tf);
 
-            g_u8g2.drawStr(2, y, "Dasar: Permenkes 2/23");
+            g_u8g2.drawStr(2, y, "Acuan: Permenkes 2023");
             y += MENU_LINE_HEIGHT;
 
             char l1[32];
             const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK]";
-            snprintf(l1, sizeof(l1), "Suhu : 15-35 C  %s", sTag);
+            snprintf(l1, sizeof(l1), "Suhu : 16-35 C  %s", sTag);
             g_u8g2.drawStr(2, y, l1);
             y += MENU_LINE_HEIGHT;
 
             char l2[32];
             const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK]";
-            snprintf(l2, sizeof(l2), "Turb : < 50 NTU %s", tbTag);
+            snprintf(l2, sizeof(l2), "Turb : <0.5 NTU %s", tbTag);
             g_u8g2.drawStr(2, y, l2);
             y += MENU_LINE_HEIGHT;
 
             g_u8g2.drawStr(2, y, "TDS  : Tdk diatur [BYP]");
 
-            display_drawStatusBar("[UP] Dashboard", "[BACK] Menu");
+            display_drawStatusBar("UP:Kembali", "BACK:Menu");
         }
         return;
     }
 
     // =========================================================================
-    // MODE AIR MINUM & HIGIENE SANITASI — EVALUASI FUZZY SUGENO
+    // MODE 1: AIR MINUM & HIGIENE — EVALUASI FUZZY SUGENO (3 INPUT)
     // =========================================================================
     if (s_viewState.measurementSubPage == 0) {
         // --- HALAMAN 1: DATA SENSOR + SKOR FUZZY (DASHBOARD) ---
-        const char* pageHeader = (s_viewState.activeParameter == WaterParameter::AIR_MINUM)
-                                     ? "Air Minum (1/2)" : "Higiene (1/2)";
-        
-        display_drawHeader(pageHeader);
+        display_drawHeader("Air Minum & Hig (1/2)");
         uint8_t y = MENU_FIRST_LINE_Y;
 
         // Suhu + status suhu
@@ -399,7 +390,7 @@ static void drawMeasurement() {
         snprintf(skorBuf, sizeof(skorBuf), "Skor : %s [%s]", p, badge);
         g_u8g2.drawStr(2, y, skorBuf);
 
-        display_drawStatusBar("[DN] Rekomendasi", "[BACK] Menu");
+        display_drawStatusBar("DN:Detail", "BACK:Menu");
 
     } else {
         // --- HALAMAN 2: DETAIL REKOMENDASI TINDAKAN ---
@@ -408,7 +399,7 @@ static void drawMeasurement() {
         g_u8g2.setFont(u8g2_font_6x10_tf);
 
         char lineBuf[32];
-        snprintf(lineBuf, sizeof(lineBuf), "Status: %s", FuzzyKualitasAir_GetStatusBadge(s_view.qualityStatus));
+        snprintf(lineBuf, sizeof(lineBuf), "Mutu  : %s", FuzzyKualitasAir_GetStatusBadge(s_view.qualityStatus));
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
@@ -425,12 +416,12 @@ static void drawMeasurement() {
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
-        g_u8g2.drawStr(2, y, "Pesan :");
+        g_u8g2.drawStr(2, y, "Saran :");
         y += MENU_LINE_HEIGHT;
         const char* pesan = FuzzyKualitasAir_GetPesan(s_view.qualityStatus);
         drawWrappedText(4, y, pesan);
 
-        display_drawStatusBar("[UP] Dashboard", "[BACK] Menu");
+        display_drawStatusBar("UP:Kembali", "BACK:Menu");
     }
 }
 
@@ -438,9 +429,9 @@ static void drawCalibration() {
     drawSimpleList("Kalibrasi Sensor", CALIBRATION_ITEMS, CALIBRATION_ITEM_COUNT,
                    s_viewState.cursorIndex);
     if (s_viewState.calibSaving) {
-        display_drawStatusBar("Menyimpan ke Flash...", nullptr);
+        display_drawStatusBar("Menyimpan...", nullptr);
     } else {
-        display_drawStatusBar("Pilih sensor, Tekan OK", "[BACK] Menu");
+        display_drawStatusBar("OK:Pilih", "BACK:Menu");
     }
 }
 
@@ -457,12 +448,10 @@ static void drawCalibrationSub() {
         case MenuState::CALIBRATION_TDS: {
             display_drawHeader("Kalibrasi TDS");
 
-            snprintf(lineBuf, sizeof(lineBuf), "ADC Raw : %u",
-                     s_view.tdsRaw);
+            snprintf(lineBuf, sizeof(lineBuf), "ADC Raw : %u", s_view.tdsRaw);
             g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
-            snprintf(lineBuf, sizeof(lineBuf), "Target  : [ %u ppm ]",
-                     s_viewState.calibTdsTarget);
+            snprintf(lineBuf, sizeof(lineBuf), "Target  : [ %u ppm ]", s_viewState.calibTdsTarget);
             g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
             if (s_viewState.calibSaving) {
@@ -470,7 +459,7 @@ static void drawCalibrationSub() {
             } else {
                 g_u8g2.drawStr(2, y, "UP/DN:Target OK:Simpan");
             }
-            display_drawStatusBar("Celupkan ke larutan standar", "[BACK] Batal");
+            display_drawStatusBar("Celup larutan", "BACK:Batal");
             break;
         }
 
@@ -479,15 +468,13 @@ static void drawCalibrationSub() {
 
             char vStr[8];
             dtostrf(s_view.turbidityVoltage, 4, 2, vStr);
-            char* p = vStr;
-            while (*p == ' ') p++;
+            char* p = vStr; while (*p == ' ') p++;
             snprintf(lineBuf, sizeof(lineBuf), "Volt   : %s V", p);
             g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
             char vcStr[8];
             dtostrf(s_viewCalib.turbidityVClear, 4, 2, vcStr);
-            p = vcStr;
-            while (*p == ' ') p++;
+            p = vcStr; while (*p == ' ') p++;
             snprintf(lineBuf, sizeof(lineBuf), "V_Clear: %s V", p);
             g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
@@ -496,7 +483,7 @@ static void drawCalibrationSub() {
             } else {
                 g_u8g2.drawStr(2, y, "Tekan OK: Lock 0 NTU");
             }
-            display_drawStatusBar("Air Aquades (0 NTU)", "[BACK] Batal");
+            display_drawStatusBar("Air Aquades", "BACK:Batal");
             break;
         }
 
@@ -505,8 +492,7 @@ static void drawCalibrationSub() {
 
             char tStr[8];
             dtostrf(s_view.temperatureRaw, 4, 1, tStr);
-            char* p = tStr;
-            while (*p == ' ') p++;
+            char* p = tStr; while (*p == ' ') p++;
             snprintf(lineBuf, sizeof(lineBuf), "Suhu Raw: %s C", p);
             g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
@@ -522,7 +508,7 @@ static void drawCalibrationSub() {
             } else {
                 g_u8g2.drawStr(2, y, "LF/RT:Offset OK:Simpan");
             }
-            display_drawStatusBar("Samakan dgn termometer", "[BACK] Batal");
+            display_drawStatusBar("Samakan termometer", "BACK:Batal");
             break;
         }
 
@@ -538,7 +524,7 @@ static void drawSettings() {
     char valueBuf[8];
     for (uint8_t i = 0; i < SETTINGS_ITEM_COUNT; i++) {
         uint8_t y = MENU_FIRST_LINE_Y + static_cast<uint8_t>(i * MENU_LINE_HEIGHT);
-        if (y > DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H) break;
+        if (y > MENU_LAST_LINE_Y) break;
 
         if (i == s_viewState.cursorIndex) {
             g_u8g2.drawStr(2, y, s_viewState.settingsAdjustMode ? "*" : ">");
@@ -553,12 +539,12 @@ static void drawSettings() {
             g_u8g2.drawStr(100, y, valueBuf);
         }
     }
-    display_drawStatusBar("Pilih item, Tekan OK", "[BACK] Menu");
+    display_drawStatusBar("OK:Pilih", "BACK:Menu");
 }
 
 static void drawAbout() {
     display_drawHeader("Tentang Alat");
-    g_u8g2.setFont(u8g2_font_6x10_tf);
+    g_u8g2.setFont(u8g2_font_5x7_tf);
 
     char line[48];
     uint8_t y = MENU_FIRST_LINE_Y;
@@ -576,9 +562,9 @@ static void drawAbout() {
     g_u8g2.drawStr(2, y, line); y += 9;
 
     snprintf(line, sizeof(line), "RTOS: FreeRTOS Aktif");
-    g_u8g2.drawStr(2, y, line); y += 9;
+    g_u8g2.drawStr(2, y, line);
 
-    display_drawStatusBar("Tekan BACK untuk kembali", nullptr);
+    display_drawStatusBar("BACK:Kembali", nullptr);
 }
 
 // =============================================================================
@@ -656,28 +642,20 @@ void gui_update(const ButtonEventMsg& msg) {
             else if (isActivate && msg.id == ButtonID::OK) {
                 switch (g_systemState.cursorIndex) {
                     case 0:
-                        g_systemState.activeParameter = WaterParameter::AIR_MINUM;
+                        g_systemState.activeParameter = WaterParameter::AIR_MINUM_HIGIENE;
                         s_samplingStartTick = millis();
                         transitionToLocked(MenuState::WAITING_SAMPLING);
                         break;
                     case 1:
-                        g_systemState.activeParameter = WaterParameter::HIGIENE_SANITASI;
+                        g_systemState.activeParameter = WaterParameter::PEMANDIAN_KOLAM;
                         s_samplingStartTick = millis();
                         transitionToLocked(MenuState::WAITING_SAMPLING);
                         break;
                     case 2:
-                        g_systemState.activeParameter = WaterParameter::PEMANDIAN_UMUM;
-                        s_samplingStartTick = millis();
-                        transitionToLocked(MenuState::WAITING_SAMPLING);
-                        break;
-                    case 3:
                         transitionToLocked(MenuState::CALIBRATION);
                         break;
-                    case 4:
+                    case 3:
                         transitionToLocked(MenuState::SETTINGS);
-                        break;
-                    case 5:
-                        transitionToLocked(MenuState::ABOUT);
                         break;
                     default:
                         break;

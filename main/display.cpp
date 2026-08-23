@@ -50,26 +50,23 @@ void display_setBrightness(uint8_t level) {
 
 /**
  * @brief Menggambar header berisi judul halaman dengan garis pemisah.
- *        Font bold 7x13 dipilih agar judul tetap tegas terbaca pada
- *        panel 1.3 inci. Baseline y=10 menyisakan 2 px sebelum garis.
+ *        Font 6x10 dipilih agar proporsional, rapi, dan tidak kebesaran.
  */
 void display_drawHeader(const char* title) {
-    g_u8g2.setFont(u8g2_font_7x13B_tf);
-    g_u8g2.drawStr(2, 10, title);
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    g_u8g2.drawStr(2, 9, title);
     g_u8g2.drawHLine(0, DISPLAY_HEADER_H - 1, DISPLAY_WIDTH);
 }
 
 /**
  * @brief Menggambar status bar bawah dengan teks kiri dan teks kanan
- *        (opsional). Bila keduanya diisi, teks kiri dipangkas otomatis
- *        agar tidak menabrak teks kanan.
+ *        (opsional). Menggunakan font 5x7 yang ringkas.
  */
 void display_drawStatusBar(const char* leftText, const char* rightText) {
     const uint8_t barY = DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H;
     g_u8g2.drawHLine(0, barY, DISPLAY_WIDTH);
 
-    // Font 6x10 (naik dari 5x7) agar keterangan tombol tetap terbaca.
-    g_u8g2.setFont(u8g2_font_6x10_tf);
+    g_u8g2.setFont(u8g2_font_5x7_tf);
     const uint8_t textY = DISPLAY_HEIGHT - 1;
 
     if (rightText != nullptr && rightText[0] != '\0') {
