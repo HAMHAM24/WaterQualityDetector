@@ -274,6 +274,17 @@ StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float dTemp, const FuzzyProfil_t* pr
     return SUHU_EKSTREM;
 }
 
+ThresholdResult_t Threshold_CekPemandian(float suhu, float turbidity)
+{
+    ThresholdResult_t res;
+    // Permenkes 2/2023 Tabel 10: Suhu 15-35 C
+    res.suhuAman = (suhu >= 15.0f && suhu <= 35.0f);
+    // Proksi rekayasa kekeruhan: < 50 NTU
+    res.turbidityAman = (turbidity < 50.0f);
+    res.semuaAman = res.suhuAman && res.turbidityAman;
+    return res;
+}
+
 float FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu_aktual)
 {
     // Menggunakan referensi standar kompensasi 25 derajat Celsius

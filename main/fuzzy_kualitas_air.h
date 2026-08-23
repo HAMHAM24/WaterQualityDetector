@@ -8,6 +8,7 @@
 #define FUZZY_KUALITAS_AIR_H
 
 #include <math.h>
+#include <stdbool.h>
 
 /* ---------- ENUM STATUS OUTPUT KUALITAS AIR (5 LEVEL) ------------------- */
 typedef enum {
@@ -24,6 +25,13 @@ typedef enum {
     SUHU_MENYIMPANG,
     SUHU_EKSTREM
 } StatusSuhu_t;
+
+/* ---------- STRUCT HASIL THRESHOLD CHECK PEMANDIAN UMUM ---------------- */
+typedef struct {
+    bool suhuAman;        /* 15 <= suhu <= 35 C (Permenkes 2/2023 Tabel 10) */
+    bool turbidityAman;   /* turbidity < 50 NTU (proksi rekayasa)           */
+    bool semuaAman;       /* suhuAman && turbidityAman                      */
+} ThresholdResult_t;
 
 /* --------------------------------------------------------------------------
  * PROFIL BAKU MUTU FUZZY
@@ -76,6 +84,14 @@ float FuzzyKualitasAir_HitungSkor_Higiene(const FuzzyProfil_t* profil, float tds
  * @brief Menghitung skor kualitas PEMANDIAN UMUM (2 input: dTemp, Turb, TDS diabaikan).
  */
 float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float dTemp, float turbidity);
+
+/**
+ * @brief Evaluasi langsung (non-fuzzy threshold checker) khusus Pemandian Umum
+ *        berdasarkan ambang batas tegas Permenkes No. 2 Tahun 2023 Tabel 10.
+ * @param suhu       Suhu aktual air (Celsius).
+ * @param turbidity  Nilai kekeruhan (NTU).
+ */
+ThresholdResult_t Threshold_CekPemandian(float suhu, float turbidity);
 
 /**
  * @brief Mengubah skor (0.0 - 1.0) menjadi enum status kualitas air.
