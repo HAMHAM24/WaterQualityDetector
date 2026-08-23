@@ -26,11 +26,11 @@ typedef enum {
     SUHU_EKSTREM
 } StatusSuhu_t;
 
-/* ---------- STRUCT HASIL THRESHOLD CHECK PEMANDIAN UMUM ---------------- */
+/* ---------- STRUCT HASIL THRESHOLD CHECK PEMANDIAN / KOLAM ------------- */
 typedef struct {
-    bool suhuAman;        /* 15 <= suhu <= 35 C (Permenkes 2/2023 Tabel 10) */
-    bool turbidityAman;   /* turbidity < 50 NTU (proksi rekayasa)           */
-    bool semuaAman;       /* suhuAman && turbidityAman                      */
+    bool suhuAman;        /* 16 <= suhu <= 35 C (Gabungan Permenkes) */
+    bool turbidityAman;   /* turbidity < 0.5 NTU (Standar kolam)     */
+    bool semuaAman;       /* suhuAman && turbidityAman               */
 } ThresholdResult_t;
 
 /* --------------------------------------------------------------------------
@@ -86,12 +86,12 @@ float FuzzyKualitasAir_HitungSkor_Higiene(const FuzzyProfil_t* profil, float tds
 float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float dTemp, float turbidity);
 
 /**
- * @brief Evaluasi langsung (non-fuzzy threshold checker) khusus Pemandian Umum
- *        berdasarkan ambang batas tegas Permenkes No. 2 Tahun 2023 Tabel 10.
+ * @brief Evaluasi langsung (non-fuzzy threshold checker) khusus Pemandian / Kolam
+ *        berdasarkan ambang batas gabungan konservatif: Suhu 16-35 C, Turb < 0.5 NTU.
  * @param suhu       Suhu aktual air (Celsius).
  * @param turbidity  Nilai kekeruhan (NTU).
  */
-ThresholdResult_t Threshold_CekPemandian(float suhu, float turbidity);
+ThresholdResult_t Threshold_CekPemandianKolam(float suhu, float turbidity);
 
 /**
  * @brief Mengubah skor (0.0 - 1.0) menjadi enum status kualitas air.
