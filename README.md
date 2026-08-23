@@ -84,7 +84,7 @@ Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-
 | **Turbidity Analog** | `PA_1` | ADC Channel 1 (12-bit) |
 | **BTN UP** | `PB_14` | Active LOW (`INPUT_PULLUP`) |
 | **BTN DOWN** | `PA_8` | Active LOW (`INPUT_PULLUP`) |
-| **BTN LEFT** | `PB_15` | Active LOW (`INPUT_PULLUP`) |
+| **BTN LEFT** | `PB_0` | Active LOW (`INPUT_PULLUP`) |
 | **BTN RIGHT** | `PB_13` | Active LOW (`INPUT_PULLUP`) |
 | **BTN OK** | `PB_12` | Active LOW (`INPUT_PULLUP`) |
 | **BTN BACK** | `PB_11` | Active LOW (`INPUT_PULLUP`) |
@@ -122,44 +122,31 @@ terhenti.
 
 ---
 
-## 8. Fitur Klasifikasi Kualitas Air (Fuzzy Sugeno)
+## 8. Mode Evaluasi Kualitas Air
 
-Sistem evaluasi menggunakan **Fuzzy Inference System (FIS) Sugeno Order-0**
-dengan **3 input, 27 aturan**, kurva trapesium (`trapmf`) dan segitiga
-(`trimf`). File `kualitas_air.fis` dan engine C (`fuzzy_kualitas_air.c`)
-identik satu sama lain.
+Firmware memiliki 2 mode evaluasi utama yang disesuaikan dengan regulasi Permenkes RI No. 2 Tahun 2023:
 
-> **PERINGATAN:** Tabel 27 aturan (rule base) saat ini adalah **draf asumsi
-> desain**. Catatan (`Note/Membership function.txt`) hanya mendefinisikan
-> bentuk MF dan 5 label output — **TIDAK memuat tabel aturan**. Tabel ini
-> **WAJIB divalidasi oleh client/pembimbing** sebelum dianggap final.
+### Mode 1: Air Minum & Higiene Sanitasi (Fuzzy Logic Sugeno Orde-0)
+Menggunakan **Fuzzy Inference System (FIS) Sugeno Orde-0** dengan **3 input, 27 aturan**, kurva trapesium (`trapmf`) dan segitiga (`trimf`):
+1. **TDS Kompensasi (ppm / mg/L)**: Ideal ($\le 250$), Batas ($150-450$), Tinggi ($>450$)
+2. **Turbidity (NTU)**: Jernih ($\le 2.5$), Sedang ($1.5-5.0$), Keruh ($\ge 6.0$)
+3. **Deviasi Suhu $\Delta$T**: Ideal ($\le 3^\circ\text{C}$ dari suhu ruang), Menyimpang ($2-6^\circ\text{C}$), Ekstrem ($\ge 8^\circ\text{C}$)
 
-### 3 Input Fuzzy:
-1. **TDS Kompensasi (ppm / mg/L)**: Rendah, Sedang, Tinggi
-2. **Turbidity (NTU)**: Jernih, Sedang, Keruh
-3. **Suhu (Celsius)**: Dingin ($\le 24$), Normal ($24-32$), Panas ($\ge 32$)
+- **Output Skor (0.00 – 1.00)** dengan 5 level status:
+  - **Skor $\ge 0.875$** $\rightarrow$ **SGT.LAYAK** (`"Sangat Baik & Aman"`)
+  - **$0.625 \le \text{Skor} < 0.875$** $\rightarrow$ **LYK.SRING** (`"Perlu Saring Sedimen Ringan"`)
+  - **$0.375 \le \text{Skor} < 0.625$** $\rightarrow$ **CUKUP** (`"Kualitas Cukup, Proses Air"`)
+  - **$0.125 \le \text{Skor} < 0.375$** $\rightarrow$ **KRITIS** (`"Kritis, Butuh Proses Intensif"`)
+  - **Skor $< 0.125$** $\rightarrow$ **TDK.LOLOS** (`"Bahaya! Tidak Lolos Uji"`)
 
-### Evaluasi & Label Output (Skala 0.00 - 1.00):
-- Evaluasi **27 Aturan** ($3 \times 3 \times 3$, AND = MIN).
-- Defuzzifikasi *Weighted Average* menghasilkan **Skor Kualitas Air (0.00 – 1.00)**.
-- **5 Tingkat Klasifikasi Status & Rekomendasi**:
-  - **Skor $\ge 0.875$** $\rightarrow$ **EXCELLENT** (`"Air Sangat Baik & Layak"`)
-  - **$0.625 \le \text{Skor} < 0.875$** $\rightarrow$ **GOOD** (`"Air Baik / Layak Digunakan"`)
-  - **$0.375 \le \text{Skor} < 0.625$** $\rightarrow$ **POOR** (`"Perlu Filtrasi Ringan"`)
-  - **$0.125 \le \text{Skor} < 0.375$** $\rightarrow$ **VERY POOR** (`"Butuh Filtrasi Intensif"`)
-  - **Skor $< 0.125$** $\rightarrow$ **NOT SUITABLE** (`"Tidak Lolos / Dilarang"`)
+---
 
-### Skema Rule Base (Draf):
-| TDS \ Suhu | Normal (netral) | Dingin / Panas |
-|---|---|---|
-| TDS Rendah + Turb Jernih | Excellent (1.00) | turun 1 tingkat |
-| TDS Sedang + Turb Sedang | Poor (0.50) | turun 1 tingkat |
-| TDS Tinggi + Turb Keruh | Not Suitable (0.00) | tetap (sudah maksimal) |
-
-### Status Suhu Air (3 Level):
-- **Dingin** : $\le 24.0\ ^\circ\text{C}$
-- **Normal** : $24.0 - 32.0\ ^\circ\text{C}$
-- **Panas**  : $\ge 32.0\ ^\circ\text{C}$
+### Mode 2: Pemandian / Kolam (Non-Fuzzy Threshold Checker)
+Berdasarkan Permenkes No. 2/2023 Tabel 10 (Pemandian Umum) dan Tabel Kolam Renang, evaluasi dilakukan secara **langsung tanpa fuzzy (crisp threshold)** dengan standar gabungan konservatif:
+- **Suhu**: `16.0 – 35.0 °C` $\rightarrow$ `[LAYAK]`, di luar itu $\rightarrow$ `[TDK]`
+- **Turbidity**: `< 0.5 NTU` $\rightarrow$ `[LAYAK]`, di atas itu $\rightarrow$ `[TDK]`
+- **TDS**: **Bypass / Tidak Diatur** (nilai sensor tetap ditampilkan dengan tag `[BYP]`)
+- **Status Akhir**: **`LAYAK`** jika kedua parameter lolos, atau **`TIDAK LAYAK`** jika ada parameter yang gagal.
 
 ---
 
