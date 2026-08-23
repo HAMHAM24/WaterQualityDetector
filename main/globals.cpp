@@ -45,8 +45,8 @@ bool globals_init() {
     g_sensorData.turbidityFiltered  = 0.0f;
     g_sensorData.tdsCompensated     = 0.0f;
     g_sensorData.fuzzyScore         = 0.0f;
-    g_sensorData.qualityStatus      = STATUS_NOT_SUITABLE;
-    g_sensorData.tempStatus         = SUHU_NORMAL;
+    g_sensorData.qualityStatus      = STATUS_TIDAK_LOLOS;
+    g_sensorData.tempStatus         = SUHU_IDEAL;
     g_sensorData.temperatureStatus  = SensorStatus::ERROR;
     g_sensorData.tdsStatus          = SensorStatus::ERROR;
     g_sensorData.turbidityStatus    = SensorStatus::ERROR;
@@ -60,7 +60,7 @@ bool globals_init() {
     }
 
     // --- Nilai awal SystemState ---
-    g_systemState.activeParameter    = WaterParameter::AIR_MINUM_HIGIENE;
+    g_systemState.activeParameter    = WaterParameter::AIR_MINUM;
     g_systemState.currentMenu        = MenuState::SPLASH;
     g_systemState.previousMenu       = MenuState::SPLASH;
     g_systemState.cursorIndex        = 0;

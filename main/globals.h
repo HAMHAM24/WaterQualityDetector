@@ -2,10 +2,6 @@
  * @file    globals.h
  * @brief   Deklarasi seluruh struktur data global, enum sistem, serta
  *          handle FreeRTOS (mutex/queue) yang dipakai lintas modul.
- * @details Modul lain tidak boleh mendefinisikan variabel global sendiri
- *          di luar file ini. Semua akses ke SensorData dan SystemState
- *          WAJIB dilindungi oleh g_dataMutex agar aman terhadap race
- *          condition antar task FreeRTOS.
  */
 
 #ifndef GLOBALS_H
@@ -23,7 +19,7 @@
 enum class SensorStatus : uint8_t {
     OK = 0,      // Sensor terbaca normal
     ERROR,       // Sensor gagal / tidak terdeteksi
-    NOT_USED     // Sensor sengaja tidak dipakai pada parameter aktif
+    NOT_USED     // Sensor sengaja tidak dipakai pada parameter aktif (misal TDS di Pemandian)
 };
 
 // =============================================================================
@@ -51,11 +47,12 @@ enum class ButtonEvent : uint8_t {
 };
 
 // =============================================================================
-// ENUM — PARAMETER STANDAR PENGUJIAN AIR (2 KATEGORI)
+// ENUM — PARAMETER STANDAR PENGUJIAN AIR (3 KATEGORI)
 // =============================================================================
 enum class WaterParameter : uint8_t {
-    AIR_MINUM_HIGIENE = 0,
-    PEMANDIAN_KOLAM,
+    AIR_MINUM = 0,
+    HIGIENE_SANITASI,
+    PEMANDIAN_UMUM,
     COUNT
 };
 
@@ -91,9 +88,9 @@ struct SensorData {
 
     // --- Hasil Olahan Fuzzy Logic ---
     float tdsCompensated;        // TDS setelah kompensasi suhu
-    float fuzzyScore;            // Skor Fuzzy Sugeno (0-100)
-    KualitasAir_t qualityStatus; // STATUS_LAYAK, STATUS_LTM, STATUS_TL
-    StatusSuhu_t tempStatus;     // SUHU_NORMAL, SUHU_ABNORMAL
+    float fuzzyScore;            // Skor Fuzzy Sugeno (0.0 - 1.0)
+    KualitasAir_t qualityStatus; // SANGAT_LAYAK, LAYAK_SARING_RINGAN, dll
+    StatusSuhu_t tempStatus;     // IDEAL, MENYIMPANG, EKSTREM
 
     SensorStatus temperatureStatus;
     SensorStatus tdsStatus;
@@ -156,13 +153,13 @@ constexpr TickType_t DATA_MUTEX_TIMEOUT = pdMS_TO_TICKS(50);
 /**
  * @brief Mengembalikan profil baku mutu fuzzy untuk parameter air tertentu.
  *        Selalu mengembalikan pointer valid; parameter di luar rentang
- *        dipetakan ke profil Higiene Sanitasi.
+ *        dipetakan ke profil Air Minum.
  */
 const FuzzyProfil_t* globals_getProfile(WaterParameter param);
 
 /**
- * @brief Inisialisasi seluruh variabel global ke nilai default dan
- *        membuat objek FreeRTOS (mutex, queue) yang dipakai bersama.
+ * @brief Inisialisasi seluruh variabel global ke nilai default yang aman,
+ *        serta membuat objek FreeRTOS (mutex, queue) yang dipakai bersama.
  *        Wajib dipanggil satu kali dari setup() sebelum task dibuat.
  * @return true jika seluruh objek FreeRTOS berhasil dibuat.
  */
