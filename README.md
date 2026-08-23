@@ -169,9 +169,8 @@ Untuk sensor yang disuplai 3.3V, `TURBIDITY_INPUT_DIVIDER` tetap `1.0`.
 
 ## 9. Antarmuka GUI & Katalog Tampilan Layar OLED 1.3" (128x64)
 
-Panel **OLED 1.3 inci SH1106** memiliki resolusi 128x64 piksel (sama dengan 0.96"),
-namun piksel fisik lebih besar sehingga proporsi teks lebih proporsional. Layout layar
-dibagi menjadi 3 zona: **Header (13 px)**, **Konten Utama (41 px)**, **Status Bar (10 px)**.
+Panel **OLED 1.3 inci SH1106 / SSD1306** memiliki resolusi 128x64 piksel. Layout layar
+dibagi menjadi 3 zona: **Header (12 px)**, **Konten Utama (44 px)**, **Status Bar (8 px)**.
 
 ### 9.1. Splash Screen (Tampilan Booting)
 Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
@@ -181,7 +180,7 @@ Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
 |                   Physic Water                    |
 |                  Quality Index                    |
 |                       FBN                         |
-|                      v1.0.0                       |
+|                      v2.1.0                       |
 |                                                   |
 +---------------------------------------------------+
 ```
@@ -215,7 +214,7 @@ stabilisasi pembacaan filter *Circular Moving Average* (20 sampel).
 |                                                   |
 |   Membaca Sensor...                               |
 |   [||||||||||||||||||................]            |
-|                                                   |
+|                       60%                         |
 |---------------------------------------------------|
 | Stabilisasi...                         BACK:Batal |
 +---------------------------------------------------+
@@ -223,43 +222,104 @@ stabilisasi pembacaan filter *Circular Moving Average* (20 sampel).
 
 ---
 
-### 9.4. Layar Hasil Pengukuran - Dual-Page View
-Menampilkan hasil pengolahan data sensor dan evaluasi Fuzzy Sugeno ($0.00 - 1.00$) secara *real-time*.
+### 9.4. Layar Hasil Pengukuran - Three-Page View
+Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Navigasi**:
 
-#### Page 1: Dashboard Data Sensor & Skor (Default)
-Gunakan tombol `DOWN` $\downarrow$ untuk melihat detail rekomendasi, atau `BACK` untuk kembali ke Menu Utama.
+#### Mode 1: Air Minum & Higiene Sanitasi (Fuzzy Sugeno)
+
+**Halaman 1/3: Dashboard Hasil Sensor & Skor Mutu**
 ```text
 +---------------------------------------------------+
-| Air Minum (1/2)                                   |
+| Air Minum (1/3)                                   |
 |---------------------------------------------------|
 | Suhu : 27.5 C (Normal)                            |
-| TDS  : 343.1 ppm                                  |
-| Turb : 10.0 NTU                                   |
-| Skor : 0.50 [POOR]                                |
+| TDS  : 280.0 ppm                                  |
+| Turb : 1.5 NTU                                    |
+| Skor : 1.00 [S.LAYAK]                             |
 |---------------------------------------------------|
 | DN:Detail                               BACK:Menu |
 +---------------------------------------------------+
 ```
 
-#### Page 2: Detail Rekomendasi Tindakan
-Gunakan tombol `UP` $\uparrow$ untuk kembali ke dashboard nilai, atau `BACK` untuk kembali ke Menu Utama.
+**Halaman 2/3: Diagnosis Parameter Penyebab**
 ```text
 +---------------------------------------------------+
-| Rekomendasi (2/2)                                 |
+| Diagnosis (2/3)                                   |
 |---------------------------------------------------|
-| Mutu  : POOR [Kurang]                             |
-| Suhu  : 27.5C [Normal]                            |
-| Saran :                                           |
-| Perlu Filtrasi Ringan                             |
+| Mutu: S.LAYAK                                     |
+| Suhu: Normal                                      |
+| TDS : Ideal                                       |
+| Turb: Jernih                                      |
 |---------------------------------------------------|
-| UP:Kembali                              BACK:Menu |
+| DN:Saran                                BACK:Menu |
++---------------------------------------------------+
+```
+
+**Halaman 3/3: Saran Tindakan Spesifik**
+```text
++---------------------------------------------------+
+| Saran (3/3)                                       |
+|---------------------------------------------------|
+| Air layak digunakan                               |
+| Pantau berkala                                    |
+|                                                   |
+|                                                   |
+|---------------------------------------------------|
+| UP:Diagnosis                            BACK:Menu |
++---------------------------------------------------+
+```
+*(Bila ada parameter bermasalah, halaman 3 langsung menyarankan tindakan tepat, misal: `TDS : RO/ganti air`, `Turb: filter total`, `Suhu: hangatkan air`).*
+
+---
+
+#### Mode 2: Pemandian / Kolam (Non-Fuzzy Threshold Checker)
+
+**Halaman 1/3: Dashboard Per-Parameter**
+```text
++---------------------------------------------------+
+| Pemandian (1/3)                                   |
+|---------------------------------------------------|
+| Suhu: 28.5 C [LAYAK]                              |
+| Turb: 0.3 NTU [LAYAK]                             |
+| TDS : 280 ppm [BYP]                               |
+| Status: LAYAK                                     |
+|---------------------------------------------------|
+| DN:Detail                               BACK:Menu |
++---------------------------------------------------+
+```
+
+**Halaman 2/3: Detail Acuan Regulasi Permenkes**
+```text
++---------------------------------------------------+
+| Pemandian (2/3)                                   |
+|---------------------------------------------------|
+| Dasar: Permenkes 2/23                             |
+| Suhu : 16-35C [LAYAK]                             |
+| Turb : <0.5NTU [LAYAK]                            |
+| TDS  : Bebas [BYPASS]                             |
+|---------------------------------------------------|
+| DN:Saran                                BACK:Menu |
++---------------------------------------------------+
+```
+
+**Halaman 3/3: Saran Tindakan**
+```text
++---------------------------------------------------+
+| Saran (3/3)                                       |
+|---------------------------------------------------|
+| Air layak digunakan                               |
+| Jaga air tetap jernih                             |
+|                                                   |
+|                                                   |
+|---------------------------------------------------|
+| UP:Diagnosis                            BACK:Menu |
 +---------------------------------------------------+
 ```
 
 ---
 
 ### 9.5. Menu Kalibrasi Sensor & Sub-menu (CALIBRATION)
-Digunakan untuk mengkalibrasi sensor TDS, Turbidity, Suhu, atau mereset ke standar pabrik secara interaktif.
+Mengelola kalibrasi probe TDS, Turbidity (2-titik), Suhu, dan Reset Pabrik.
 
 #### Menu Pilihan Kalibrasi:
 ```text
@@ -275,55 +335,83 @@ Digunakan untuk mengkalibrasi sensor TDS, Turbidity, Suhu, atau mereset ke stand
 +---------------------------------------------------+
 ```
 
-#### 1. Layar Interaktif Kalibrasi TDS:
-Gunakan tombol `UP`/`DOWN` untuk menyelaraskan nilai Target Acuan (misal `707 ppm`), lalu tekan `OK` untuk menghitung $K$-factor baru dan menyimpannya ke EEPROM Flash.
+#### 1. Kalibrasi TDS:
+Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk menyelaraskan nilai target acuan, lalu tekan `OK` untuk menyimpan.
 ```text
 +---------------------------------------------------+
 | Kalibrasi TDS                                     |
 |---------------------------------------------------|
 | ADC Raw : 1245                                    |
 | Target  : [ 707 ppm ]                             |
-| UP/DN:Target OK:Simpan                            |
+| UP/DN:Atur  OK:Simpan                             |
 |                                                   |
 |---------------------------------------------------|
-| UP/DN:Ubah                             BACK:Batal |
+| Celup larutan                          BACK:Batal |
 +---------------------------------------------------+
 ```
 
-#### 2. Layar Interaktif Kalibrasi Turbidity:
-Celupkan sensor ke air murni jernih (aquades 0 NTU), lalu tekan tombol `OK` untuk mengunci tegangan $V_{\text{clear}}$ dan menyimpannya ke EEPROM Flash.
+#### 2. Kalibrasi Turbidity Dua Titik:
+- **Langkah 1/2**: Celupkan sensor ke air jernih (0 NTU), tekan `OK` untuk merekam tegangan $V_{\text{clear}}$.
+- **Langkah 2/2**: Celupkan ke larutan standar. Atur nilai NTU custom (`1-3000 NTU`) dengan `UP`/`DOWN`, lalu tekan `OK` untuk mengunci slope dan menyimpan ke EEPROM.
+
 ```text
 +---------------------------------------------------+
-| Kalibrasi Turbidity                               |
+| Turbidity (1/2)                                   |
 |---------------------------------------------------|
-| Volt   : 3.10 V                                   |
-| V_Clear: 3.10 V                                   |
-| Tekan OK: Lock 0 NTU                              |
+| Volt   : 3.25 V                                   |
+| Air jernih: OK ambil                              |
 |                                                   |
 |---------------------------------------------------|
-| Air Aquades                            BACK:Batal |
+| Air jernih 0 NTU                       BACK:Batal |
++---------------------------------------------------+
+```
+```text
++---------------------------------------------------+
+| Turbidity (2/2)                                   |
+|---------------------------------------------------|
+| Volt   : 2.10 V                                   |
+| Std: 1000 NTU                                     |
+| V0 : 3.25 V                                       |
+| UP/DN atur OK simpan                              |
+|---------------------------------------------------|
+| Larutan standar                        BACK:Batal |
 +---------------------------------------------------+
 ```
 
-#### 3. Layar Interaktif Kalibrasi Suhu:
-Gunakan tombol `LEFT`/`RIGHT` untuk mengatur offset koreksi suhu ($\pm 0.1\text{ }^\circ\text{C}$), lalu tekan tombol `OK` untuk menyimpannya ke EEPROM Flash.
+#### 3. Kalibrasi Suhu:
+Bandingkan suhu raw dengan termometer presisi. Gunakan `LEFT`/`RIGHT` untuk mengatur offset ($\pm 0.1\text{ }^\circ\text{C}$), lalu tekan `OK`.
 ```text
 +---------------------------------------------------+
 | Kalibrasi Suhu                                    |
 |---------------------------------------------------|
 | Suhu Raw: 27.4 C                                  |
 | Offset  : [ +0.1 C ]                              |
-| LF/RT:Offset OK:Simpan                            |
+| LF/RT:Atur  OK:Simpan                             |
 |                                                   |
 |---------------------------------------------------|
-| LF/RT:Ubah                             BACK:Batal |
+| Cek termometer                         BACK:Batal |
++---------------------------------------------------+
+```
+
+#### 4. Konfirmasi Reset Pabrik:
+Mencegah data kalibrasi dan pengaturan OLED terhapus secara tidak sengaja.
+```text
++---------------------------------------------------+
+| Reset Pabrik?                                     |
+|---------------------------------------------------|
+| Semua kalibrasi &                                 |
+| OLED akan direset!                                |
+| OK:Ya      BACK:Batal                             |
+|                                                   |
+|---------------------------------------------------|
+| Yakin reset?                           BACK:Batal |
 +---------------------------------------------------+
 ```
 
 ---
 
-### 9.6. Menu Pengaturan OLED & Adjust Mode (SETTINGS)
-Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*.
+### 9.6. Menu Pengaturan OLED (Tersimpan di EEPROM)
+Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*. Nilai otomatis tersimpan permanen ke EEPROM Flash saat selesai diatur.
 
 ```text
 +---------------------------------------------------+
@@ -334,41 +422,25 @@ Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*.
 |   Reset Pengaturan                                |
 |   Informasi Firmware                              |
 |---------------------------------------------------|
-| OK:Atur                                 BACK:Menu |
-+---------------------------------------------------+
-```
-
-#### Tampilan Adjust Mode (`*`):
-Tekan `OK` pada `Brightness`/`Kontras` hingga kursor berubah menjadi `*`. Gunakan tombol `LEFT`/`RIGHT` untuk mengubah nilai, tekan `OK`/`BACK` untuk menyimpan.
-```text
-+---------------------------------------------------+
-| Pengaturan OLED                                   |
-|---------------------------------------------------|
-| * Brightness                           215        |
-|   Kontras                              128        |
-|   Reset Pengaturan                                |
-|   Informasi Firmware                              |
-|---------------------------------------------------|
-| LF/RT:Ubah                             OK:Selesai |
+| OK:Pilih                                BACK:Menu |
 +---------------------------------------------------+
 ```
 
 ---
 
 ### 9.7. Layar Informasi System (ABOUT)
-Menampilkan spesifikasi firmware, MCU, dan penggunaan RAM secara *real-time*.
+Menampilkan identitas firmware, tipe hardware, dan status FreeRTOS.
 ```text
 +---------------------------------------------------+
 | Tentang Alat                                      |
 |---------------------------------------------------|
-| Alat: Water Quality Analyzer                      |
-| FW  : v1.0.0 (FBN)                                |
-| HW  : Rev-A (Blackpill F401CCU6)                  |
+| Alat: WQ Analyzer                                 |
+| FW  : v2.1.0                                      |
+| HW  : Blackpill F401CC                            |
 | MCU : STM32F401CCU6                               |
 | RTOS: FreeRTOS Aktif                              |
-| Heap: 48240 B                                     |
 |---------------------------------------------------|
-| Info Sistem                             BACK:Menu |
+| BACK:Kembali                                      |
 +---------------------------------------------------+
 ```
 
@@ -380,44 +452,39 @@ Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` akan mengeksekusi uji 
 
 ```text
 ========================================
-    VALIDASI AUTOMATIS FUZZY LOGIC    
+    VALIDASI AUTOMATIS FIRMWARE         
 ========================================
-Input Test  : TDS = 350.0 ppm, Turbidity = 10.0 NTU
-Hasil Skor  : 0.50
-Status Badge: POOR
-Status Pesan: Perlu Filtrasi Ringan
-========================================
-Air Jernih (50 ppm, 0.5 NTU): 1.00 [EXCELLENT]
-Air Buruk (1100 ppm, 28 NTU): 0.00 [NOT-SUIT]
+Air Minum (Ideal)     : 1.00 [S.LAYAK]
+Air Minum (1 Batas)   : 0.75 [LAYAK]
+Pemandian (28C, 0.3NTU): [LAYAK]
+Pemandian (28C, 2.5NTU): [TDK LAYAK]
+Turb 2 titik (2.50V): 50.0 NTU
 ========================================
 ```
 
-Target skor $0.50$ (`POOR`) ini memverifikasi bahwa perhitungan Fuzzy Sugeno pada MCU STM32 100% konsisten dengan rancangan FIS dan simulasi MATLAB.
-
 ---
 
-## 11. Panduan Cara Kalibrasi Sensor
+## 11. Panduan Kalibrasi Sensor
 
-### A. Kalibrasi TDS (1-Point Buffer Solution)
+### A. Kalibrasi Suhu (DS18B20 Offset) — Lakukan Pertama
+1. Tempatkan probe DS18B20 bersama termometer laboratorium presisi di dalam wadah air yang sama.
+2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Suhu**.
+3. Bandingkan nilai **Suhu Raw** pada layar dengan termometer acuan.
+4. Tekan tombol `LEFT` atau `RIGHT` untuk menyelaraskan nilai **Offset**.
+5. Tekan tombol **OK** untuk menyimpan nilai offset ke EEPROM Flash.
+
+### B. Kalibrasi TDS (1-Point Solution)
 1. Siapkan larutan standar TDS acuan (misal **707 ppm**).
-2. Celupkan probe TDS ke dalam larutan standar dan tunggu hingga nilai pembacaan stabil.
-3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi** $\rightarrow$ **Kalibrasi TDS**.
+2. Celupkan probe TDS ke dalam larutan dan tunggu pembacaan stabil.
+3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi TDS**.
 4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`).
-5. Tekan tombol **OK**. Perangkat akan menghitung faktor pengali $K$-Factor baru secara otomatis dan menyimpannya ke memori EEPROM Flash.
+5. Tekan tombol **OK** untuk menghitung $K$-Factor baru dan menyimpannya ke EEPROM Flash.
 
-### B. Kalibrasi Turbidity (Air Murni 0 NTU)
-1. Siapkan air murni aquades (0 NTU).
-2. Celupkan sensor Turbidity SEN0189 ke dalam air aquades.
-3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi** $\rightarrow$ **Kalibrasi Turbidity**.
-4. Amati nilai ADC Raw dan tegangan pada layar hingga stabil.
-5. Tekan tombol **OK**. Perangkat akan mengunci tegangan air jernih $V_{\text{clear}}$ sebagai referensi 0 NTU dan menyimpannya ke memori EEPROM Flash.
-
-### C. Kalibrasi Suhu (DS18B20 Offset)
-1. Tempatkan DS18B20 bersama termometer laboratorium presisi di dalam wadah air yang sama.
-2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi** $\rightarrow$ **Kalibrasi Suhu**.
-3. Bandingkan nilai **Suhu Raw** pada layar dengan pembacaan termometer laboratorium.
-4. Tekan tombol `LEFT` atau `RIGHT` untuk menambah atau mengurangi nilai **Offset** hingga hasil akhir sesuai dengan termometer laboratorium.
-5. Tekan tombol **OK** untuk menyimpan nilai offset ke memori EEPROM Flash.
+### C. Kalibrasi Turbidity (2-Point Custom Wizard)
+1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Turbidity**.
+2. **Titik 1 (0 NTU)**: Celupkan sensor ke air aquades murni. Amati nilai voltase hingga stabil, lalu tekan **OK**.
+3. **Titik 2 (Standar Custom)**: Celupkan sensor ke larutan standar (misal **100 NTU** atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka standar di layar dengan larutan yang dipakai.
+4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor, dan menyimpannya ke EEPROM Flash.
 
 ---
 
@@ -425,6 +492,6 @@ Target skor $0.50$ (`POOR`) ini memverifikasi bahwa perhitungan Fuzzy Sugeno pad
 
 1. Buka folder proyek ini pada **Arduino IDE** atau **VS Code + STM32duino**.
 2. Pilih Board: **Generic STM32F4 series** $\rightarrow$ **BlackPill F401CC**.
-3. Pastikan semua library pendukung sudah terinstall.
+3. Pastikan library pendukung terinstall: `STM32duino FreeRTOS`, `U8g2`, `OneWire`, `DallasTemperature`.
 4. Compile dan upload firmware ke STM32 Blackpill.
 5. Buka Serial Monitor pada baud rate `115200` untuk mengamati log startup validasi dan telemetri debug.
