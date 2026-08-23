@@ -268,7 +268,7 @@ Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Nav
 | UP:Diagnosis                            BACK:Menu |
 +---------------------------------------------------+
 ```
-*(Bila ada parameter bermasalah, halaman 3 langsung menyarankan tindakan tepat, misal: `TDS : RO/ganti air`, `Turb: filter total`, `Suhu: hangatkan air`).*
+*(Bila ada parameter bermasalah, halaman 3 langsung menyarankan tindakan tepat, misal: `TDS : RO/ganti air`, `Turb: filter total`, `Suhu: hangatkan air`, `Uji ulang air`).*
 
 ---
 
@@ -288,15 +288,15 @@ Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Nav
 +---------------------------------------------------+
 ```
 
-**Halaman 2/3: Detail Acuan Regulasi Permenkes**
+**Halaman 2/3: Diagnosis Batas Regulasi**
 ```text
 +---------------------------------------------------+
-| Pemandian (2/3)                                   |
+| Diagnosis (2/3)                                   |
 |---------------------------------------------------|
-| Dasar: Permenkes 2/23                             |
-| Suhu : 16-35C [LAYAK]                             |
-| Turb : <0.5NTU [LAYAK]                            |
-| TDS  : Bebas [BYPASS]                             |
+| Batas Pemandian/Kolam                             |
+| Suhu: 16-35C [LAYAK]                              |
+| Turb: <0.5NTU [LAYAK]                             |
+| TDS : BYPASS                                      |
 |---------------------------------------------------|
 | DN:Saran                                BACK:Menu |
 +---------------------------------------------------+
@@ -315,6 +315,7 @@ Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Nav
 | UP:Diagnosis                            BACK:Menu |
 +---------------------------------------------------+
 ```
+*(Bila ada parameter tidak aman, halaman 3 menampilkan: `Suhu: atur suhu air`, `Turb: jernihkan air`, `Uji ulang air`).*
 
 ---
 
@@ -336,7 +337,7 @@ Mengelola kalibrasi probe TDS, Turbidity (2-titik), Suhu, dan Reset Pabrik.
 ```
 
 #### 1. Kalibrasi TDS:
-Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk menyelaraskan nilai target acuan, lalu tekan `OK` untuk menyimpan.
+Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk menyelaraskan nilai target acuan (presisi `+-1 ppm`), lalu tekan `OK` untuk menyimpan.
 ```text
 +---------------------------------------------------+
 | Kalibrasi TDS                                     |
@@ -352,7 +353,7 @@ Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk m
 
 #### 2. Kalibrasi Turbidity Dua Titik:
 - **Langkah 1/2**: Celupkan sensor ke air jernih (0 NTU), tekan `OK` untuk merekam tegangan $V_{\text{clear}}$.
-- **Langkah 2/2**: Celupkan ke larutan standar. Atur nilai NTU custom (`1-3000 NTU`) dengan `UP`/`DOWN`, lalu tekan `OK` untuk mengunci slope dan menyimpan ke EEPROM.
+- **Langkah 2/2**: Celupkan ke larutan standar. Atur nilai NTU custom (`1-3000 NTU`, step `+-5 NTU`) dengan `UP`/`DOWN`, lalu tekan `OK` untuk mengunci slope dan menyimpan ke EEPROM.
 
 ```text
 +---------------------------------------------------+
@@ -426,21 +427,70 @@ Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*. Nilai otomatis t
 +---------------------------------------------------+
 ```
 
----
-
-### 9.7. Layar Informasi System (ABOUT)
-Menampilkan identitas firmware, tipe hardware, dan status FreeRTOS.
+#### Adjust Mode Brightness / Kontras
+Tekan `OK` pada `Brightness` atau `Kontras` untuk masuk mode edit (`*`).
+Gunakan `LEFT`/`RIGHT` untuk mengubah nilai. Tekan `OK` atau `BACK` untuk
+selesai dan menjadwalkan penyimpanan EEPROM.
 ```text
 +---------------------------------------------------+
-| Tentang Alat                                      |
+| Pengaturan OLED                                   |
+|---------------------------------------------------|
+| * Brightness                           215        |
+|   Kontras                              128        |
+|   Reset Pengaturan                                |
+|   Informasi Firmware                              |
+|---------------------------------------------------|
+| OK:Pilih                                BACK:Menu |
++---------------------------------------------------+
+```
+
+#### Reset Pengaturan OLED
+Pilih `Reset Pengaturan`, lalu tekan `OK`. Brightness dan kontras kembali ke
+nilai default serta disimpan ke EEPROM. Selama write Flash tertunda, status bar
+menampilkan `Menyimpan...`.
+```text
++---------------------------------------------------+
+| Pengaturan OLED                                   |
+|---------------------------------------------------|
+| > Brightness                           200        |
+|   Kontras                              128        |
+|   Reset Pengaturan                                |
+|   Informasi Firmware                              |
+|---------------------------------------------------|
+| Menyimpan...                            BACK:Menu |
++---------------------------------------------------+
+```
+
+---
+
+### 9.7. Layar Informasi Sistem (ABOUT — Dual-Page View)
+Menampilkan identitas firmware, tipe hardware, dan status FreeRTOS yang dipisah menjadi **2 Halaman**:
+
+#### Halaman 1/2: Software & Metodologi
+```text
++---------------------------------------------------+
+| Tentang (1/2)                                     |
 |---------------------------------------------------|
 | Alat: WQ Analyzer                                 |
 | FW  : v2.1.0                                      |
-| HW  : Blackpill F401CC                            |
-| MCU : STM32F401CCU6                               |
+| Reg : Permenkes 2023                              |
 | RTOS: FreeRTOS Aktif                              |
 |---------------------------------------------------|
-| BACK:Kembali                                      |
+| DN:Hardware                             BACK:Menu |
++---------------------------------------------------+
+```
+
+#### Halaman 2/2: Hardware & Memori
+```text
++---------------------------------------------------+
+| Tentang (2/2)                                     |
+|---------------------------------------------------|
+| HW  : Blackpill F401                              |
+| MCU : STM32F401CC                                 |
+| OLED: 1.3 SH1106                                  |
+| Heap: 48240 B                                     |
+|---------------------------------------------------|
+| UP:Firmware                             BACK:Menu |
 +---------------------------------------------------+
 ```
 
@@ -470,20 +520,20 @@ Turb 2 titik (2.50V): 50.0 NTU
 1. Tempatkan probe DS18B20 bersama termometer laboratorium presisi di dalam wadah air yang sama.
 2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Suhu**.
 3. Bandingkan nilai **Suhu Raw** pada layar dengan termometer acuan.
-4. Tekan tombol `LEFT` atau `RIGHT` untuk menyelaraskan nilai **Offset**.
+4. Tekan tombol `LEFT` atau `RIGHT` untuk menyelaraskan nilai **Offset** ($\pm 0.1\text{ }^\circ\text{C}$).
 5. Tekan tombol **OK** untuk menyimpan nilai offset ke EEPROM Flash.
 
 ### B. Kalibrasi TDS (1-Point Solution)
 1. Siapkan larutan standar TDS acuan (misal **707 ppm**).
 2. Celupkan probe TDS ke dalam larutan dan tunggu pembacaan stabil.
 3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi TDS**.
-4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`).
+4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`) dengan ketelitian **$\pm 1\text{ ppm}$**.
 5. Tekan tombol **OK** untuk menghitung $K$-Factor baru dan menyimpannya ke EEPROM Flash.
 
 ### C. Kalibrasi Turbidity (2-Point Custom Wizard)
 1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Turbidity**.
 2. **Titik 1 (0 NTU)**: Celupkan sensor ke air aquades murni. Amati nilai voltase hingga stabil, lalu tekan **OK**.
-3. **Titik 2 (Standar Custom)**: Celupkan sensor ke larutan standar (misal **100 NTU** atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka standar di layar dengan larutan yang dipakai.
+3. **Titik 2 (Standar Custom)**: Celupkan sensor ke larutan standar (misal **100 NTU** atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka standar di layar dengan larutan yang dipakai (kenaikan **$\pm 5\text{ NTU}$**).
 4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor, dan menyimpannya ke EEPROM Flash.
 
 ---
