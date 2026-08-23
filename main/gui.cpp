@@ -215,49 +215,6 @@ static void drawSensorLine(uint8_t y, const char* label, float value,
     g_u8g2.drawStr(2, y, line);
 }
 
-/** @brief Memecah teks panjang agar muat di lebar layar (maks 2 baris). */
-static void drawWrappedText(uint8_t x, uint8_t y, const char* text) {
-    const uint8_t maxWidth = static_cast<uint8_t>(DISPLAY_WIDTH - x - 2);
-    char buf[64];
-    strncpy(buf, text, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-
-    uint8_t lineY = y;
-    char* start = buf;
-    for (uint8_t line = 0; line < 2 && *start != '\0'; line++) {
-        if (lineY > DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H) break;
-
-        char* end = start;
-        char* lastSpace = nullptr;
-
-        while (*end != '\0') {
-            char save = end[1];
-            end[1] = '\0';
-            bool fits = (g_u8g2.getStrWidth(start) <= maxWidth);
-            end[1] = save;
-            if (!fits) break;
-            if (*end == ' ') lastSpace = end;
-            end++;
-        }
-
-        if (end == start) break;
-
-        if (lastSpace != nullptr && lastSpace > start) {
-            *lastSpace = '\0';
-            g_u8g2.drawStr(x, lineY, start);
-            lineY += MENU_LINE_HEIGHT;
-            start = lastSpace + 1;
-        } else {
-            char save = *end;
-            *end = '\0';
-            g_u8g2.drawStr(x, lineY, start);
-            lineY += MENU_LINE_HEIGHT;
-            if (save != '\0') { *end = save; start = end; }
-            else start = end;
-        }
-    }
-}
-
 static const char* severityLabel(uint8_t severity, const char* ideal,
                                  const char* batas, const char* buruk) {
     if (severity == 0) return ideal;
@@ -637,6 +594,25 @@ static void drawAbout() {
     display_drawStatusBar("BACK:Kembali", nullptr);
 }
 
+static void drawFactoryResetConfirm() {
+    display_drawHeader("Reset Pabrik?");
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    uint8_t y = MENU_FIRST_LINE_Y;
+
+    g_u8g2.drawStr(2, y, "Semua kalibrasi &");
+    y += MENU_LINE_HEIGHT;
+    g_u8g2.drawStr(2, y, "OLED akan direset!");
+    y += MENU_LINE_HEIGHT;
+
+    if (s_viewState.calibSaving) {
+        g_u8g2.drawStr(2, y, "Menyimpan...");
+    } else {
+        g_u8g2.drawStr(2, y, "OK:Ya      BACK:Batal");
+    }
+
+    display_drawStatusBar("Yakin reset?", "BACK:Batal");
+}
+
 // =============================================================================
 // DISPATCH TABLE — indeks sesuai nilai enum MenuState
 // =============================================================================
@@ -652,7 +628,8 @@ static DrawFn s_drawTable[static_cast<uint8_t>(MenuState::COUNT)] = {
     drawCalibrationSub,     // CALIBRATION_TURBIDITY
     drawCalibrationSub,     // CALIBRATION_TEMPERATURE
     drawSettings,           // SETTINGS
-    drawAbout               // ABOUT
+    drawAbout,              // ABOUT
+    drawFactoryResetConfirm // FACTORY_RESET_CONFIRM
 };
 
 // =============================================================================
@@ -772,11 +749,8 @@ void gui_update(const ButtonEventMsg& msg) {
                 } else if (g_systemState.cursorIndex == 2) {
                     transitionToLocked(MenuState::CALIBRATION_TEMPERATURE);
                 } else if (g_systemState.cursorIndex == 3) {
-                    // Reset Kalibrasi ke Nilai Pabrik
-                    storage_loadFactoryDefaults(g_calibParams);
-                    storage_requestSave(g_calibParams);
-                    g_systemState.calibSaving = true;
-                    g_systemState.displayDirty = true;
+                    // Masuk ke halaman konfirmasi Reset Pabrik
+                    transitionToLocked(MenuState::FACTORY_RESET_CONFIRM);
                 }
             } else if (isActivate && msg.id == ButtonID::BACK) {
                 transitionToLocked(MenuState::HOME);
@@ -928,6 +902,20 @@ void gui_update(const ButtonEventMsg& msg) {
         case MenuState::ABOUT:
             if (isActivate && msg.id == ButtonID::BACK) {
                 transitionToLocked(g_systemState.previousMenu);
+            }
+            break;
+
+        case MenuState::FACTORY_RESET_CONFIRM:
+            if (isActivate && msg.id == ButtonID::OK) {
+                storage_loadFactoryDefaults(g_calibParams);
+                storage_requestSave(g_calibParams);
+                g_systemState.settingsBrightness = g_calibParams.displayBrightness;
+                g_systemState.settingsContrast   = g_calibParams.displayContrast;
+                g_systemState.calibSaving = true;
+                g_systemState.displayDirty = true;
+                transitionToLocked(MenuState::CALIBRATION);
+            } else if (isActivate && msg.id == ButtonID::BACK) {
+                transitionToLocked(MenuState::CALIBRATION);
             }
             break;
 

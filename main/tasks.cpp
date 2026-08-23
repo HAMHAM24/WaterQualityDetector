@@ -140,7 +140,7 @@ static void taskSerialDebug(void* /* pvParameters */) {
     static const char* const menuNames[] = {
         "SPLASH", "HOME", "WAITING_SAMPLING", "MEASUREMENT", "CALIBRATION",
         "CALIBRATION_TDS", "CALIBRATION_TURBIDITY", "CALIBRATION_TEMPERATURE",
-        "SETTINGS", "ABOUT"
+        "SETTINGS", "ABOUT", "FACTORY_RESET_CONFIRM"
     };
 
     for (;;) {

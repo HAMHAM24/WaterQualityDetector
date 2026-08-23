@@ -69,6 +69,7 @@ enum class MenuState : uint8_t {
     CALIBRATION_TEMPERATURE,
     SETTINGS,
     ABOUT,
+    FACTORY_RESET_CONFIRM,
     COUNT   // jumlah total state, dipakai untuk ukuran dispatch table
 };
 
