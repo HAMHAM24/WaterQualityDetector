@@ -154,7 +154,7 @@ float sensors_voltageToTds(float voltage, float temperature) {
     // diperlakukan sebagai suhu acuan agar tidak menyimpangkan hasil.
     float temperatureForComp = temperature;
     if (temperatureForComp < 1.0f || temperatureForComp > 60.0f) {
-        temperatureForComp = BASE_ROOM_TEMP;
+        temperatureForComp = TDS_TEMP_REFERENCE;
     }
 
     // Menggunakan base room temp untuk perhitungan deviasi offset
@@ -189,7 +189,7 @@ void sensors_updateTDS() {
     const float voltage = sensors_adcToVoltage(filteredRaw, TDS_INPUT_DIVIDER);
 
     // Suhu terakhir dibaca lebih dulu agar kompensasi memakai nilai terbaru.
-    float temperature = BASE_ROOM_TEMP;
+    float temperature = TDS_TEMP_REFERENCE;
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         if (g_sensorData.temperatureStatus == SensorStatus::OK) {
             temperature = g_sensorData.temperature;
@@ -261,7 +261,7 @@ void sensors_updateTurbidity() {
  *        peruntukan air yang sedang aktif.
  */
 void sensors_processFuzzy() {
-    float tempSnapshot = BASE_ROOM_TEMP;
+    float tempSnapshot = TDS_TEMP_REFERENCE;
     float tdsSnapshot = 0.0f;
     float turbSnapshot = 0.0f;
     bool tempValid = false;
@@ -282,11 +282,10 @@ void sensors_processFuzzy() {
     const float tdsComp = tdsSnapshot;
     const FuzzyProfil_t* profil = globals_getProfile(activeParam);
     float skor = 0.0f;
-    float dTemp = 0.0f;
 
     ThresholdResult_t thResult = { false, false, false };
     KualitasAir_t qStatus = STATUS_TIDAK_LOLOS;
-    StatusSuhu_t tStatus = SUHU_IDEAL;
+    StatusSuhu_t tStatus = SUHU_NORMAL;
     uint8_t tdsSeverity = 0;
     uint8_t turbiditySeverity = 0;
     uint8_t temperatureSeverity = 0;
@@ -297,21 +296,24 @@ void sensors_processFuzzy() {
         thResult = Threshold_CekPemandianKolam(tempSnapshot, turbSnapshot);
         skor = thResult.semuaAman ? 1.0f : 0.0f;
         qStatus = thResult.semuaAman ? STATUS_SANGAT_LAYAK : STATUS_TIDAK_LOLOS;
-        tStatus = thResult.suhuAman ? SUHU_IDEAL : SUHU_EKSTREM;
+        tStatus = thResult.suhuAman ? SUHU_NORMAL
+                                    : ((tempSnapshot < PEMANDIAN_KOLAM_SUHU_MIN)
+                                           ? SUHU_DINGIN : SUHU_PANAS);
         turbiditySeverity = thResult.turbidityAman ? 0 : 2;
         temperatureSeverity = thResult.suhuAman ? 0 : 2;
     } else {
-        // Mode Air Minum & Higiene Sanitasi: Evaluasi Fuzzy Sugeno (3 input)
-        dTemp = fabs(tempSnapshot - BASE_ROOM_TEMP);
-        skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
+        // Mode Air Minum & Higiene: suhu air absolut masuk langsung ke FIS.
+        skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, tempSnapshot);
         qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
-        tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(dTemp, profil) : SUHU_IDEAL;
+        tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(tempSnapshot, profil) : SUHU_NORMAL;
         tdsSeverity = (tdsComp <= profil->tds0_c) ? 0 :
                       ((tdsComp <= profil->tds1_c) ? 1 : 2);
         turbiditySeverity = (turbSnapshot <= profil->turb0_c) ? 0 :
                              ((turbSnapshot <= profil->turb1_c) ? 1 : 2);
-        temperatureSeverity = (dTemp <= profil->temp0_c) ? 0 :
-                              ((dTemp <= profil->temp1_c) ? 1 : 2);
+        // Severity: Normal=0, Dingin=1, Panas=2.
+        temperatureSeverity = (tempSnapshot >= profil->suhuNormal_a &&
+                               tempSnapshot <= profil->suhuNormal_c) ? 0 :
+                              ((tempSnapshot < profil->suhuNormal_a) ? 1 : 2);
     }
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {

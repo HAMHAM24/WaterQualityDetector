@@ -46,7 +46,7 @@ bool globals_init() {
     g_sensorData.tdsCompensated     = 0.0f;
     g_sensorData.fuzzyScore         = 0.0f;
     g_sensorData.qualityStatus      = STATUS_TIDAK_LOLOS;
-    g_sensorData.tempStatus         = SUHU_IDEAL;
+    g_sensorData.tempStatus         = SUHU_NORMAL;
     g_sensorData.thresholdResult    = { false, false, false };
     g_sensorData.tdsSeverity        = 0;
     g_sensorData.turbiditySeverity  = 0;

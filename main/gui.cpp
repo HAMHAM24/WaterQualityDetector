@@ -434,7 +434,7 @@ static void drawMeasurement() {
         y += MENU_LINE_HEIGHT;
 
         snprintf(lineBuf, sizeof(lineBuf), "Suhu: %s", severityLabel(
-                 s_view.temperatureSeverity, "Ideal", "Batas", "Ekstr"));
+                 s_view.temperatureSeverity, "Normal", "Dingin", "Panas"));
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
@@ -475,10 +475,10 @@ static void drawMeasurement() {
                 y += MENU_LINE_HEIGHT;
             }
             if (s_view.temperatureSeverity == 1) {
-                g_u8g2.drawStr(2, y, "Suhu: atur suhu");
+                g_u8g2.drawStr(2, y, "Suhu: hangatkan air");
                 y += MENU_LINE_HEIGHT;
             } else if (s_view.temperatureSeverity == 2) {
-                g_u8g2.drawStr(2, y, "Suhu: jangan pakai");
+                g_u8g2.drawStr(2, y, "Suhu: dinginkan air");
                 y += MENU_LINE_HEIGHT;
             }
             if (y <= MENU_LAST_LINE_Y) {
