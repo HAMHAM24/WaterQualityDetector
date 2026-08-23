@@ -66,9 +66,9 @@ static float hitungOutput_3Input(int s1, int s2, int s3) {
 }
 
 /* ==========================================================================
- * 1. AIR MINUM (3 INPUT: TDS, Turb, dTemp)
+ * 1. AIR MINUM (3 INPUT: TDS, Turb, Suhu absolut)
  * ========================================================================== */
-float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float dTemp)
+float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float suhu)
 {
     if (profil == NULL) return 0.0f;
 
@@ -76,8 +76,8 @@ float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float td
     if (tds > profil->tds2_max) tds = profil->tds2_max;
     if (turbidity < 0.0f) turbidity = 0.0f;
     if (turbidity > profil->turb2_max) turbidity = profil->turb2_max;
-    if (dTemp < 0.0f) dTemp = 0.0f;
-    if (dTemp > profil->temp2_max) dTemp = profil->temp2_max;
+    if (suhu < 0.0f) suhu = 0.0f;
+    if (suhu > profil->suhuPanas_c) suhu = profil->suhuPanas_c;
 
     const float mfTds[3] = {
         trapmf(tds, 0.0f, 0.0f, profil->tds0_b, profil->tds0_c),
@@ -91,10 +91,12 @@ float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float td
         trapmf(turbidity, profil->turb2_a, profil->turb2_b, profil->turb2_max, profil->turb2_max)
     };
 
+    /* Severity: Normal=0 (ideal), Dingin=1 (batas), Panas=2 (buruk). */
     const float mfTemp[3] = {
-        trapmf(dTemp, 0.0f, 0.0f, profil->temp0_b, profil->temp0_c),
-        trimf(dTemp, profil->temp1_a, profil->temp1_b, profil->temp1_c),
-        trapmf(dTemp, profil->temp2_a, profil->temp2_b, profil->temp2_max, profil->temp2_max)
+        trimf(suhu, profil->suhuNormal_a, profil->suhuNormal_b, profil->suhuNormal_c),
+        trapmf(suhu, 0.0f, 0.0f, profil->suhuDingin_b, profil->suhuDingin_c),
+        trapmf(suhu, profil->suhuPanas_a, profil->suhuPanas_b,
+               profil->suhuPanas_c, profil->suhuPanas_c)
     };
 
     float sum_wz = 0.0f;
@@ -163,16 +165,16 @@ float FuzzyKualitasAir_HitungSkor_Higiene(const FuzzyProfil_t* profil, float tds
 }
 
 /* ==========================================================================
- * 3. PEMANDIAN UMUM (2 INPUT: dTemp, Turb) - TDS DIBYPASS
+ * 3. PEMANDIAN UMUM (2 INPUT: Suhu, Turb) - TDS DIBYPASS
  * ========================================================================== */
-float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float dTemp, float turbidity)
+float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float suhu, float turbidity)
 {
     if (profil == NULL) return 0.0f;
 
     if (turbidity < 0.0f) turbidity = 0.0f;
     if (turbidity > profil->turb2_max) turbidity = profil->turb2_max;
-    if (dTemp < 0.0f) dTemp = 0.0f;
-    if (dTemp > profil->temp2_max) dTemp = profil->temp2_max;
+    if (suhu < 0.0f) suhu = 0.0f;
+    if (suhu > profil->suhuPanas_c) suhu = profil->suhuPanas_c;
 
     const float mfTurb[3] = {
         trapmf(turbidity, 0.0f, 0.0f, profil->turb0_b, profil->turb0_c),
@@ -181,9 +183,10 @@ float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float d
     };
 
     const float mfTemp[3] = {
-        trapmf(dTemp, 0.0f, 0.0f, profil->temp0_b, profil->temp0_c),
-        trimf(dTemp, profil->temp1_a, profil->temp1_b, profil->temp1_c),
-        trapmf(dTemp, profil->temp2_a, profil->temp2_b, profil->temp2_max, profil->temp2_max)
+        trimf(suhu, profil->suhuNormal_a, profil->suhuNormal_b, profil->suhuNormal_c),
+        trapmf(suhu, 0.0f, 0.0f, profil->suhuDingin_b, profil->suhuDingin_c),
+        trapmf(suhu, profil->suhuPanas_a, profil->suhuPanas_b,
+               profil->suhuPanas_c, profil->suhuPanas_c)
     };
 
     float sum_wz = 0.0f;
@@ -254,24 +257,25 @@ const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status)
 const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status)
 {
     switch (status) {
-        case SUHU_IDEAL:      return "Ideal";
-        case SUHU_MENYIMPANG: return "Batas";
-        case SUHU_EKSTREM:    return "Ekstr";
+        case SUHU_NORMAL: return "Normal";
+        case SUHU_DINGIN: return "Dingin";
+        case SUHU_PANAS:  return "Panas";
         default:              return "Unknown";
     }
 }
 
-StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float dTemp, const FuzzyProfil_t* profil)
+StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float suhu, const FuzzyProfil_t* profil)
 {
-    if (profil == NULL) return SUHU_EKSTREM;
+    if (profil == NULL) return SUHU_PANAS;
 
-    float ide = trapmf(dTemp, 0.0f, 0.0f, profil->temp0_b, profil->temp0_c);
-    float meny = trimf(dTemp, profil->temp1_a, profil->temp1_b, profil->temp1_c);
-    float eks = trapmf(dTemp, profil->temp2_a, profil->temp2_b, profil->temp2_max, profil->temp2_max);
+    float normal = trimf(suhu, profil->suhuNormal_a, profil->suhuNormal_b, profil->suhuNormal_c);
+    float dingin = trapmf(suhu, 0.0f, 0.0f, profil->suhuDingin_b, profil->suhuDingin_c);
+    float panas = trapmf(suhu, profil->suhuPanas_a, profil->suhuPanas_b,
+                         profil->suhuPanas_c, profil->suhuPanas_c);
 
-    if (ide >= meny && ide >= eks) return SUHU_IDEAL;
-    if (meny >= ide && meny >= eks) return SUHU_MENYIMPANG;
-    return SUHU_EKSTREM;
+    if (normal >= dingin && normal >= panas) return SUHU_NORMAL;
+    if (dingin >= normal && dingin >= panas) return SUHU_DINGIN;
+    return SUHU_PANAS;
 }
 
 ThresholdResult_t Threshold_CekPemandianKolam(float suhu, float turbidity)

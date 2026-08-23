@@ -95,7 +95,7 @@ constexpr float TEMP_OFFSET_LIMIT   = 5.0f;
 constexpr uint8_t WATER_PROFILE_COUNT = 1;
 
 constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
-    // [0] AIR MINUM & HIGIENE SANITASI (TDS, Turb, Deviasi Suhu dari ruang)
+    // [0] AIR MINUM & HIGIENE SANITASI (TDS, Turb, Suhu air absolut)
     {
         150.0f, 250.0f,          // TDS 0 (Ideal <= 250)
         150.0f, 300.0f, 450.0f,  // TDS 1 (Batas 150-450, acuan Permenkes < 300)
@@ -105,16 +105,16 @@ constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
         1.5f, 3.0f, 5.0f,        // Turb 1 (Sedang 1.5-5.0, acuan Permenkes < 3)
         4.0f, 6.0f, 100.0f,      // Turb 2 (Keruh >= 6)
 
-        1.0f, 3.0f,              // Temp 0 (Deviasi Ideal <= 3 C dari suhu ruang)
-        2.0f, 4.0f, 6.0f,        // Temp 1 (Deviasi Menyimpang 2-6 C)
-        5.0f, 8.0f, 50.0f,       // Temp 2 (Deviasi Ekstrem >= 8 C)
+        24.0f, 28.0f,            // Dingin: trapmf [0 0 24 28]
+        24.0f, 28.0f, 32.0f,     // Normal: trimf [24 28 32]
+        28.0f, 32.0f, 50.0f,     // Panas : trapmf [28 32 50 50]
 
         0.875f, 0.625f, 0.375f, 0.125f // Thresholds status mutu
     }
 };
 
-// Suhu Ruangan Referensi untuk menghitung deviasi suhu pada Air Minum & Higiene
-constexpr float BASE_ROOM_TEMP = 28.0f;
+// Referensi kompensasi sensor TDS standar adalah 25 C; bukan input fuzzy suhu.
+constexpr float TDS_TEMP_REFERENCE = 25.0f;
 
 // =============================================================================
 // AMBANG BATAS CRISP PEMANDIAN / KOLAM (Non-Fuzzy Threshold Checker)

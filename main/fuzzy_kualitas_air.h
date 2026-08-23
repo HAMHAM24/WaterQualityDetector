@@ -21,9 +21,9 @@ typedef enum {
 
 /* ---------- ENUM STATUS SUHU AIR (3 LEVEL) ----------------------------- */
 typedef enum {
-    SUHU_IDEAL = 0,
-    SUHU_MENYIMPANG,
-    SUHU_EKSTREM
+    SUHU_NORMAL = 0,
+    SUHU_DINGIN,
+    SUHU_PANAS
 } StatusSuhu_t;
 
 /* ---------- STRUCT HASIL THRESHOLD CHECK PEMANDIAN / KOLAM ------------- */
@@ -36,7 +36,8 @@ typedef struct {
 /* --------------------------------------------------------------------------
  * PROFIL BAKU MUTU FUZZY
  *
- * Menggunakan pendekatan 3 Severity Level (0=Ideal, 1=Batas, 2=Buruk):
+ * Menggunakan pendekatan 3 Severity Level (0=Ideal, 1=Batas, 2=Buruk).
+ * Untuk suhu air absolut: Normal=0, Dingin=1, Panas=2.
  *   IDEAL (0)   : trapmf [0, 0, p0_b, p0_c]
  *   BATAS (1)   : trimf  [p1_a, p1_b, p1_c]
  *   TINGGI (2)  : trapmf [p2_a, p2_b, max, max]
@@ -52,10 +53,10 @@ typedef struct {
     float turb1_a, turb1_b, turb1_c;
     float turb2_a, turb2_b, turb2_max;
 
-    /* Parameter Deviasi Suhu (Delta C) */
-    float temp0_b, temp0_c;
-    float temp1_a, temp1_b, temp1_c;
-    float temp2_a, temp2_b, temp2_max;
+    /* Parameter Suhu Air Absolut (Celsius) */
+    float suhuDingin_b, suhuDingin_c;           /* trapmf [0, 0, b, c] */
+    float suhuNormal_a, suhuNormal_b, suhuNormal_c; /* trimf [a, b, c] */
+    float suhuPanas_a, suhuPanas_b, suhuPanas_c;    /* trapmf [a, b, c, c] */
 
     /* Thresholds */
     float threshSangatLayak;
@@ -71,9 +72,9 @@ extern "C" {
 /* ---------- DEKLARASI FUNGSI UTAMA -------------------------------------- */
 
 /**
- * @brief Menghitung skor kualitas AIR MINUM (3 input: TDS, Turb, dTemp).
+ * @brief Menghitung skor kualitas AIR MINUM (3 input: TDS, Turb, Suhu).
  */
-float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float dTemp);
+float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float suhu);
 
 /**
  * @brief Menghitung skor kualitas HIGIENE SANITASI (2 input: TDS, Turb).
@@ -81,9 +82,9 @@ float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float td
 float FuzzyKualitasAir_HitungSkor_Higiene(const FuzzyProfil_t* profil, float tds, float turbidity);
 
 /**
- * @brief Menghitung skor kualitas PEMANDIAN UMUM (2 input: dTemp, Turb, TDS diabaikan).
+ * @brief Fungsi legacy evaluasi fuzzy Pemandian (tidak dipakai mode aktif).
  */
-float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float dTemp, float turbidity);
+float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float suhu, float turbidity);
 
 /**
  * @brief Evaluasi langsung (non-fuzzy threshold checker) khusus Pemandian / Kolam
@@ -114,7 +115,7 @@ const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status);
 const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status);
 
 float         FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu_aktual);
-StatusSuhu_t  FuzzyKualitasAir_CekStatusSuhu(float dTemp, const FuzzyProfil_t* profil);
+StatusSuhu_t  FuzzyKualitasAir_CekStatusSuhu(float suhu, const FuzzyProfil_t* profil);
 
 #ifdef __cplusplus
 }

@@ -28,12 +28,12 @@ MF2='SEDANG':'trimf',[1.5 3 5]
 MF3='KERUH':'trapmf',[4 6 100 100]
 
 [Input3]
-Name='DeviasiSuhu'
+Name='Suhu'
 Range=[0 50]
 NumMFs=3
-MF1='IDEAL':'trapmf',[0 0 1 3]
-MF2='MENYIMPANG':'trimf',[2 4 6]
-MF3='EKSTREM':'trapmf',[5 8 50 50]
+MF1='Normal':'trimf',[24 28 32]
+MF2='Dingin':'trapmf',[0 0 24 28]
+MF3='Panas':'trapmf',[28 32 50 50]
 
 [Output1]
 Name='Kualitas'
