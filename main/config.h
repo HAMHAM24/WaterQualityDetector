@@ -151,6 +151,16 @@ constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
 constexpr float BASE_ROOM_TEMP = 28.0f;
 
 // =============================================================================
+// AMBANG BATAS CRISP PEMANDIAN UMUM (Permenkes 2/2023 Tabel 10)
+// -----------------------------------------------------------------------------
+// Khusus mode Pemandian Umum, evaluasi tidak melalui sistem fuzzy melainkan
+// pengecekan ambang batas langsung (threshold checker).
+// =============================================================================
+constexpr float PEMANDIAN_SUHU_MIN  = 15.0f;  // Permenkes 2/2023 Tabel 10: 15-35 C
+constexpr float PEMANDIAN_SUHU_MAX  = 35.0f;  // Permenkes 2/2023 Tabel 10: 15-35 C
+constexpr float PEMANDIAN_TURB_MAX  = 50.0f;  // Proksi rekayasa kekeruhan (< 50 NTU)
+
+// =============================================================================
 // DISPLAY OLED 1.3" SH1106 128x64
 // =============================================================================
 constexpr uint8_t DISPLAY_WIDTH       = 128;
