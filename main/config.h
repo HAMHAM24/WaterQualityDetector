@@ -73,7 +73,7 @@ constexpr float TDS_KFACTOR_MAX     = 5.00f;
 constexpr uint16_t TDS_CALIB_TARGET_DEFAULT = 707;  
 constexpr uint16_t TDS_CALIB_TARGET_MIN     = 50;
 constexpr uint16_t TDS_CALIB_TARGET_MAX     = 2000;
-constexpr uint16_t TDS_CALIB_TARGET_STEP    = 5;
+constexpr uint16_t TDS_CALIB_TARGET_STEP    = 1;   // increment/decrement +- 1 ppm
 
 // =============================================================================
 // KALIBRASI SENSOR TURBIDITY
@@ -85,7 +85,7 @@ constexpr float TURBIDITY_VSTANDARD_DEFAULT = 0.0f; // 0 = titik kedua belum dik
 constexpr float TURBIDITY_NTU_STANDARD_DEFAULT = 100.0f;
 constexpr uint16_t TURBIDITY_NTU_STANDARD_MIN  = 1;
 constexpr uint16_t TURBIDITY_NTU_STANDARD_MAX  = 3000;
-constexpr uint16_t TURBIDITY_NTU_STANDARD_STEP = 10;
+constexpr uint16_t TURBIDITY_NTU_STANDARD_STEP = 5;    // increment/decrement +- 5 NTU
 constexpr float TURBIDITY_MIN_CALIBRATION_DELTA_V = 0.02f;
 
 // =============================================================================
