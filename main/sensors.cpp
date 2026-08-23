@@ -284,51 +284,37 @@ void sensors_processFuzzy() {
     float skor = 0.0f;
     float dTemp = 0.0f;
 
-    // Kalkulasi nilai delta suhu sesuai peruntukan
+    ThresholdResult_t thResult = { false, false, false };
+    KualitasAir_t qStatus = STATUS_TIDAK_LOLOS;
+    StatusSuhu_t tStatus = SUHU_IDEAL;
+
     if (activeParam == WaterParameter::PEMANDIAN_UMUM) {
-        // Delta rentang mutlak 15-35 C
-        float lowDiff = (15.0f - tempSnapshot);
-        float highDiff = (tempSnapshot - 35.0f);
-        float maxDiff = (lowDiff > highDiff) ? lowDiff : highDiff;
-        dTemp = (maxDiff > 0.0f) ? maxDiff : 0.0f;
+        // Mode Pemandian Umum: Evaluasi Threshold Langsung (Non-Fuzzy)
+        // Berdasarkan Permenkes No. 2/2023 Tabel 10: Suhu 15-35 C, Turbidity < 50 NTU
+        thResult = Threshold_CekPemandian(tempSnapshot, turbSnapshot);
+        skor = thResult.semuaAman ? 1.0f : 0.0f;
+        qStatus = thResult.semuaAman ? STATUS_SANGAT_LAYAK : STATUS_TIDAK_LOLOS;
+        tStatus = thResult.suhuAman ? SUHU_IDEAL : SUHU_EKSTREM;
     } else {
-        // Delta deviasi dari suhu ruang referensi
+        // Mode Air Minum & Higiene Sanitasi: Evaluasi Fuzzy Sugeno
         dTemp = fabs(tempSnapshot - BASE_ROOM_TEMP);
-    }
 
-    // Call the specific fuzzy engine based on parameter
-    switch (activeParam) {
-        case WaterParameter::AIR_MINUM:
+        if (activeParam == WaterParameter::AIR_MINUM) {
             skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
-            break;
-        case WaterParameter::HIGIENE_SANITASI:
+        } else {
             skor = FuzzyKualitasAir_HitungSkor_Higiene(profil, tdsComp, turbSnapshot);
-            break;
-        case WaterParameter::PEMANDIAN_UMUM:
-            skor = FuzzyKualitasAir_HitungSkor_Pemandian(profil, dTemp, turbSnapshot);
-            break;
-        default:
-            skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
-            break;
-    }
+        }
 
-    const KualitasAir_t qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
-    const StatusSuhu_t tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(dTemp, profil)
-                                            : SUHU_IDEAL;
+        qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
+        tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(dTemp, profil) : SUHU_IDEAL;
+    }
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
-        g_sensorData.tdsCompensated = tdsComp;
-        g_sensorData.fuzzyScore     = skor;
-        g_sensorData.qualityStatus  = qStatus;
-        g_sensorData.tempStatus     = tStatus;
-        
-        // Atur flag bila TDS di bypass (misalnya di Pemandian)
-        if (activeParam == WaterParameter::PEMANDIAN_UMUM) {
-            g_sensorData.tdsStatus = SensorStatus::NOT_USED;
-        } else if (g_sensorData.tdsStatus == SensorStatus::NOT_USED) {
-            // Restore status jika diubah dari menu lain, walau aktualnya butuh pembacaan ulang.
-            // Asumsi siklus updateTDS akan memperbaruinya nanti.
-        }
+        g_sensorData.tdsCompensated   = tdsComp;
+        g_sensorData.fuzzyScore       = skor;
+        g_sensorData.qualityStatus    = qStatus;
+        g_sensorData.tempStatus       = tStatus;
+        g_sensorData.thresholdResult  = thResult;
 
         g_systemState.displayDirty  = true;
         xSemaphoreGive(g_dataMutex);
