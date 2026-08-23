@@ -129,6 +129,9 @@ struct SystemState {
     uint8_t measurementSubPage;       // 0 = Data Sensor + Skor, 1 = Detail Fuzzy & Rekomendasi
 
     uint16_t calibTdsTarget;          // nilai acuan larutan TDS pada layar kalibrasi
+    uint16_t calibTurbidityTarget;    // nilai custom titik kedua turbidity (NTU)
+    uint8_t calibTurbidityStep;       // 0=air jernih, 1=larutan standar
+    float calibTurbidityVClear;       // kandidat titik 0 NTU, belum ditulis sebelum wizard selesai
     bool calibSaving;                 // true saat pesan "Menyimpan..." perlu tampil
 
     uint8_t settingsBrightness;       // 10-255

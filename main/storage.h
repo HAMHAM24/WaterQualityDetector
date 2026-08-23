@@ -1,7 +1,7 @@
 /**
  * @file    storage.h
- * @brief   Modul Storage EEPROM — Mengelola penyimpanan permanen parameter
- *          kalibrasi sensor (TDS K-Factor, Turbidity VClear, Temp Offset)
+ * @brief   Modul Storage EEPROM — Mengelola penyimpanan permanen kalibrasi
+ *          sensor dan pengaturan tampilan OLED.
  *          pada memori Flash non-volatile STM32.
  * @details PENTING soal keamanan waktu (timing): STM32F401 tidak memiliki
  *          EEPROM sejati. Library EEPROM STM32duino mengemulasikannya dengan
@@ -31,10 +31,14 @@
  * @brief  Struktur data parameter kalibrasi sensor yang disimpan di EEPROM.
  */
 struct CalibrationParams {
-    uint32_t magicHeader;      // Marker 0x43414C49 ("CALI") untuk memvalidasi memori
+    uint32_t magicHeader;      // Marker untuk memvalidasi format data EEPROM
     float    tdsKFactor;       // Faktor pengali kalibrasi TDS
     float    turbidityVClear;  // Tegangan sensor saat air murni/jernih 0 NTU
     float    tempOffset;       // Offset koreksi suhu °C
+    float    turbidityVStandard;   // Tegangan titik standar turbidity (> 0 NTU)
+    float    turbidityNtuStandard; // Nilai custom titik standar (1-3000 NTU)
+    uint8_t  displayBrightness;    // Pengaturan brightness OLED
+    uint8_t  displayContrast;      // Pengaturan contrast OLED
 };
 
 /**

@@ -81,6 +81,12 @@ constexpr uint16_t TDS_CALIB_TARGET_STEP    = 5;
 constexpr float TURBIDITY_VCLEAR_DEFAULT = 3.3f;   
 constexpr float TURBIDITY_VCLEAR_MIN     = 0.5f;   
 constexpr float TURBIDITY_NTU_PER_VOLT   = 30.0f;  
+constexpr float TURBIDITY_VSTANDARD_DEFAULT = 0.0f; // 0 = titik kedua belum dikalibrasi
+constexpr float TURBIDITY_NTU_STANDARD_DEFAULT = 100.0f;
+constexpr uint16_t TURBIDITY_NTU_STANDARD_MIN  = 1;
+constexpr uint16_t TURBIDITY_NTU_STANDARD_MAX  = 3000;
+constexpr uint16_t TURBIDITY_NTU_STANDARD_STEP = 10;
+constexpr float TURBIDITY_MIN_CALIBRATION_DELTA_V = 0.02f;
 
 // =============================================================================
 // KALIBRASI OFFSET SUHU

@@ -17,8 +17,16 @@
 #include <EEPROM.h>
 #include <string.h>
 
-constexpr uint32_t CALIB_MAGIC_KEY = 0x43414C49; // ASCII "CALI"
+constexpr uint32_t CALIB_MAGIC_KEY = 0x43414C32; // ASCII "CAL2"
+constexpr uint32_t LEGACY_MAGIC_KEY = 0x43414C49; // ASCII "CALI"
 constexpr int EEPROM_START_ADDR    = 0;
+
+struct LegacyCalibrationParams {
+    uint32_t magicHeader;
+    float    tdsKFactor;
+    float    turbidityVClear;
+    float    tempOffset;
+};
 
 CalibrationParams g_calibParams;
 
@@ -64,6 +72,10 @@ void storage_loadFactoryDefaults(CalibrationParams& params) {
     params.tdsKFactor      = TDS_KFACTOR_DEFAULT;
     params.turbidityVClear = TURBIDITY_VCLEAR_DEFAULT;
     params.tempOffset      = TEMP_OFFSET_DEFAULT;
+    params.turbidityVStandard = TURBIDITY_VSTANDARD_DEFAULT;
+    params.turbidityNtuStandard = TURBIDITY_NTU_STANDARD_DEFAULT;
+    params.displayBrightness = DISPLAY_DEFAULT_BRIGHTNESS;
+    params.displayContrast = DISPLAY_DEFAULT_CONTRAST;
 }
 
 void storage_clampParams(CalibrationParams& params) {
@@ -78,6 +90,12 @@ void storage_clampParams(CalibrationParams& params) {
     if (isnan(params.tempOffset)) {
         params.tempOffset = TEMP_OFFSET_DEFAULT;
     }
+    if (isnan(params.turbidityVStandard)) {
+        params.turbidityVStandard = TURBIDITY_VSTANDARD_DEFAULT;
+    }
+    if (isnan(params.turbidityNtuStandard)) {
+        params.turbidityNtuStandard = TURBIDITY_NTU_STANDARD_DEFAULT;
+    }
 
     params.tdsKFactor = constrain(params.tdsKFactor,
                                    TDS_KFACTOR_MIN, TDS_KFACTOR_MAX);
@@ -91,12 +109,35 @@ void storage_clampParams(CalibrationParams& params) {
 
     params.tempOffset = constrain(params.tempOffset,
                                    -TEMP_OFFSET_LIMIT, TEMP_OFFSET_LIMIT);
+    params.turbidityVStandard = constrain(params.turbidityVStandard,
+                                           0.0f, vclearMax);
+    params.turbidityNtuStandard = constrain(params.turbidityNtuStandard,
+                                             static_cast<float>(TURBIDITY_NTU_STANDARD_MIN),
+                                             static_cast<float>(TURBIDITY_NTU_STANDARD_MAX));
+    params.displayBrightness = constrain(params.displayBrightness,
+                                         DISPLAY_MIN_LEVEL, DISPLAY_MAX_LEVEL);
+    params.displayContrast = constrain(params.displayContrast,
+                                       DISPLAY_MIN_LEVEL, DISPLAY_MAX_LEVEL);
 
     params.magicHeader = CALIB_MAGIC_KEY;
 }
 
 void storage_init() {
     EEPROM.get(EEPROM_START_ADDR, g_calibParams);
+
+    if (g_calibParams.magicHeader == LEGACY_MAGIC_KEY) {
+        // Migrasi satu kali dari format lama (16 byte) tanpa membuang kalibrasi.
+        LegacyCalibrationParams legacy;
+        EEPROM.get(EEPROM_START_ADDR, legacy);
+        storage_loadFactoryDefaults(g_calibParams);
+        g_calibParams.tdsKFactor = legacy.tdsKFactor;
+        g_calibParams.turbidityVClear = legacy.turbidityVClear;
+        g_calibParams.tempOffset = legacy.tempOffset;
+        storage_clampParams(g_calibParams);
+        s_pendingParams = g_calibParams;
+        s_savePending = true;
+        return;
+    }
 
     if (g_calibParams.magicHeader != CALIB_MAGIC_KEY) {
         // EEPROM belum pernah diinisialisasi: pakai nilai standar pabrik.

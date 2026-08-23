@@ -70,9 +70,12 @@ bool globals_init() {
     g_systemState.cursorIndex        = 0;
     g_systemState.measurementSubPage = 0;
     g_systemState.calibTdsTarget     = TDS_CALIB_TARGET_DEFAULT;
+    g_systemState.calibTurbidityTarget = static_cast<uint16_t>(g_calibParams.turbidityNtuStandard);
+    g_systemState.calibTurbidityStep = 0;
+    g_systemState.calibTurbidityVClear = 0.0f;
     g_systemState.calibSaving        = false;
-    g_systemState.settingsBrightness = DISPLAY_DEFAULT_BRIGHTNESS;
-    g_systemState.settingsContrast   = DISPLAY_DEFAULT_CONTRAST;
+    g_systemState.settingsBrightness = g_calibParams.displayBrightness;
+    g_systemState.settingsContrast   = g_calibParams.displayContrast;
     g_systemState.settingsAdjustMode = false;
     g_systemState.systemOK           = true;
     g_systemState.displayDirty       = true; // gambar pertama kali wajib terjadi
