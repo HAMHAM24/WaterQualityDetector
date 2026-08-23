@@ -9,7 +9,7 @@
 // INFORMASI FIRMWARE / HARDWARE
 // =============================================================================
 constexpr const char* FIRMWARE_NAME     = "Water Quality Analyzer";
-constexpr const char* FIRMWARE_VERSION  = "2.0.0 (Permenkes 2023)";
+constexpr const char* FIRMWARE_VERSION  = "2.1.0";
 constexpr const char* HARDWARE_VERSION  = "Rev-A (Blackpill F401CCU6)";
 constexpr const char* MCU_NAME          = "STM32F401CCU6";
 constexpr const char* DISPLAY_NAME      = "OLED 1.3\" SH1106";
@@ -23,7 +23,7 @@ constexpr uint8_t PIN_UART_TX = PA_9;
 constexpr uint8_t PIN_UART_RX = PA_10;  
 
 // =============================================================================
-// PIN MAPPING — OLED SH1106 (I2C)
+// PIN MAPPING — OLED SH1106 / SSD1306 (I2C)
 // =============================================================================
 constexpr uint8_t PIN_OLED_SCL = PB_8;
 constexpr uint8_t PIN_OLED_SDA = PB_9;
@@ -90,83 +90,51 @@ constexpr float TEMP_OFFSET_STEP    = 0.1f;
 constexpr float TEMP_OFFSET_LIMIT   = 5.0f;   
 
 // =============================================================================
-// PROFIL BAKU MUTU PER PERUNTUKAN AIR (Permenkes 2023)
+// PROFIL BAKU MUTU FUZZY (AIR MINUM & HIGIENE SANITASI)
 // =============================================================================
-constexpr uint8_t WATER_PROFILE_COUNT = 3;
+constexpr uint8_t WATER_PROFILE_COUNT = 1;
 
 constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
-    // [0] AIR MINUM (TDS, Turb, Deviasi Suhu dari ruang)
+    // [0] AIR MINUM & HIGIENE SANITASI (TDS, Turb, Deviasi Suhu dari ruang)
     {
-        150.0f, 250.0f,          // TDS 0
-        150.0f, 300.0f, 450.0f,  // TDS 1
-        300.0f, 450.0f, 2000.0f, // TDS 2
+        150.0f, 250.0f,          // TDS 0 (Ideal <= 250)
+        150.0f, 300.0f, 450.0f,  // TDS 1 (Batas 150-450, acuan Permenkes < 300)
+        300.0f, 450.0f, 2000.0f, // TDS 2 (Tinggi > 450)
 
-        1.5f, 2.5f,              // Turb 0
-        1.5f, 3.0f, 5.0f,        // Turb 1
-        4.0f, 6.0f, 100.0f,      // Turb 2
+        1.5f, 2.5f,              // Turb 0 (Jernih <= 2.5)
+        1.5f, 3.0f, 5.0f,        // Turb 1 (Sedang 1.5-5.0, acuan Permenkes < 3)
+        4.0f, 6.0f, 100.0f,      // Turb 2 (Keruh >= 6)
 
-        1.0f, 3.0f,              // Temp 0 (Deviasi <= 3)
-        2.0f, 4.0f, 6.0f,        // Temp 1 
-        5.0f, 8.0f, 50.0f,       // Temp 2
+        1.0f, 3.0f,              // Temp 0 (Deviasi Ideal <= 3 C dari suhu ruang)
+        2.0f, 4.0f, 6.0f,        // Temp 1 (Deviasi Menyimpang 2-6 C)
+        5.0f, 8.0f, 50.0f,       // Temp 2 (Deviasi Ekstrem >= 8 C)
 
-        0.875f, 0.625f, 0.375f, 0.125f // Thresholds
-    },
-
-    // [1] HIGIENE SANITASI (TDS, Turbidity. dTemp diabaikan/identik dgn Air Minum)
-    {
-        150.0f, 250.0f,          
-        150.0f, 300.0f, 450.0f,  
-        300.0f, 450.0f, 2000.0f, 
-
-        1.5f, 2.5f,              
-        1.5f, 3.0f, 5.0f,        
-        4.0f, 6.0f, 100.0f,      
-
-        1.0f, 3.0f,              
-        2.0f, 4.0f, 6.0f,        
-        5.0f, 8.0f, 50.0f,       
-
-        0.875f, 0.625f, 0.375f, 0.125f
-    },
-
-    // [2] PEMANDIAN UMUM (Deviasi Suhu dari 15-35, Turbidity sbg kejernihan. TDS bypass)
-    {
-        0.0f, 0.0f,              // TDS (diabaikan)
-        0.0f, 0.0f, 0.0f,        
-        0.0f, 0.0f, 0.0f,        
-
-        10.0f, 20.0f,            // Turb 0 (Lebih longgar)
-        15.0f, 30.0f, 50.0f,     // Turb 1
-        40.0f, 60.0f, 500.0f,    // Turb 2
-
-        1.0f, 3.0f,              // Temp 0 (Deviasi dari rentang mutlak 15-35)
-        2.0f, 5.0f, 8.0f,        // Temp 1
-        6.0f, 10.0f, 30.0f,      // Temp 2
-
-        0.875f, 0.625f, 0.375f, 0.125f
+        0.875f, 0.625f, 0.375f, 0.125f // Thresholds status mutu
     }
 };
 
-// Konstanta Suhu Udara/Ruangan Referensi untuk Air Minum & Higiene Sanitasi
+// Suhu Ruangan Referensi untuk menghitung deviasi suhu pada Air Minum & Higiene
 constexpr float BASE_ROOM_TEMP = 28.0f;
 
 // =============================================================================
-// AMBANG BATAS CRISP PEMANDIAN UMUM (Permenkes 2/2023 Tabel 10)
+// AMBANG BATAS CRISP PEMANDIAN / KOLAM (Non-Fuzzy Threshold Checker)
 // -----------------------------------------------------------------------------
-// Khusus mode Pemandian Umum, evaluasi tidak melalui sistem fuzzy melainkan
-// pengecekan ambang batas langsung (threshold checker).
+// Sesuai kesepakatan gabungan konservatif:
+//   - Suhu: 16.0 - 35.0 C (Pemandian 15-35 C, Kolam 16-40 C -> gabungan: 16-35 C)
+//   - Turbidity: < 0.5 NTU (Standar kejernihan air kolam renang)
+//   - TDS: Tidak dievaluasi (bypass), nilai tetap ditampilkan di OLED
 // =============================================================================
-constexpr float PEMANDIAN_SUHU_MIN  = 15.0f;  // Permenkes 2/2023 Tabel 10: 15-35 C
-constexpr float PEMANDIAN_SUHU_MAX  = 35.0f;  // Permenkes 2/2023 Tabel 10: 15-35 C
-constexpr float PEMANDIAN_TURB_MAX  = 50.0f;  // Proksi rekayasa kekeruhan (< 50 NTU)
+constexpr float PEMANDIAN_KOLAM_SUHU_MIN = 16.0f;  // Batas minimum suhu aman
+constexpr float PEMANDIAN_KOLAM_SUHU_MAX = 35.0f;  // Batas maksimum suhu aman
+constexpr float PEMANDIAN_KOLAM_TURB_MAX = 0.5f;   // Batas maksimum kekeruhan (< 0.5 NTU)
 
 // =============================================================================
-// DISPLAY OLED 1.3" SH1106 128x64
+// DISPLAY OLED 1.3" / 0.96" 128x64
 // =============================================================================
 constexpr uint8_t DISPLAY_WIDTH       = 128;
 constexpr uint8_t DISPLAY_HEIGHT      = 64;
-constexpr uint8_t DISPLAY_HEADER_H    = 13;   
-constexpr uint8_t DISPLAY_STATUSBAR_H = 10;   
+constexpr uint8_t DISPLAY_HEADER_H    = 12;   
+constexpr uint8_t DISPLAY_STATUSBAR_H = 8;    
 
 constexpr uint8_t DISPLAY_DEFAULT_CONTRAST   = 128; 
 constexpr uint8_t DISPLAY_DEFAULT_BRIGHTNESS = 200; 
@@ -214,11 +182,11 @@ constexpr uint16_t STACK_SIZE_OLED          = 512;
 constexpr uint16_t STACK_SIZE_SERIAL_DEBUG  = 352;
 
 // =============================================================================
-// TATA LETAK DAFTAR MENU
+// TATA LETAK DAFTAR MENU (Font proporsional & nyaman untuk 128x64)
 // =============================================================================
-constexpr uint8_t MENU_LINE_HEIGHT    = 10;
+constexpr uint8_t MENU_LINE_HEIGHT    = 11;
 constexpr uint8_t MENU_VISIBLE_ROWS   = 4;
-constexpr uint8_t MENU_FIRST_LINE_Y   = DISPLAY_HEADER_H + 8;   
+constexpr uint8_t MENU_FIRST_LINE_Y   = DISPLAY_HEADER_H + 9;   
 constexpr uint8_t MENU_LAST_LINE_Y    = DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H - 1; 
 
 // =============================================================================

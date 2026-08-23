@@ -47,12 +47,11 @@ enum class ButtonEvent : uint8_t {
 };
 
 // =============================================================================
-// ENUM — PARAMETER STANDAR PENGUJIAN AIR (3 KATEGORI)
+// ENUM — PARAMETER STANDAR PENGUJIAN AIR (2 MODE)
 // =============================================================================
 enum class WaterParameter : uint8_t {
-    AIR_MINUM = 0,
-    HIGIENE_SANITASI,
-    PEMANDIAN_UMUM,
+    AIR_MINUM_HIGIENE = 0,   // Mode 1: Fuzzy Sugeno (3 input)
+    PEMANDIAN_KOLAM,         // Mode 2: Non-Fuzzy Threshold Check
     COUNT
 };
 
