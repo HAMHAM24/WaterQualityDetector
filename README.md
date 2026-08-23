@@ -130,7 +130,7 @@ Firmware memiliki 2 mode evaluasi utama yang disesuaikan dengan regulasi Permenk
 Menggunakan **Fuzzy Inference System (FIS) Sugeno Orde-0** dengan **3 input, 27 aturan**, kurva trapesium (`trapmf`) dan segitiga (`trimf`):
 1. **TDS Kompensasi (ppm / mg/L)**: Ideal ($\le 250$), Batas ($150-450$), Tinggi ($>450$)
 2. **Turbidity (NTU)**: Jernih ($\le 2.5$), Sedang ($1.5-5.0$), Keruh ($\ge 6.0$)
-3. **Deviasi Suhu $\Delta$T**: Ideal ($\le 3^\circ\text{C}$ dari suhu ruang), Menyimpang ($2-6^\circ\text{C}$), Ekstrem ($\ge 8^\circ\text{C}$)
+3. **Suhu Air (Celsius)**: Dingin ($\le 24^\circ\text{C}$), Normal ($24-32^\circ\text{C}$), Panas ($\ge 32^\circ\text{C}$)
 
 - **Output Skor (0.00 – 1.00)** dengan 5 level status:
   - **Skor $\ge 0.875$** $\rightarrow$ **S.LAYAK** (`"Air Sangat Layak"`)
