@@ -529,7 +529,8 @@ static void drawCalibrationSub() {
         }
 
         case MenuState::CALIBRATION_TURBIDITY: {
-            display_drawHeader("Kalibrasi Turbidity");
+            display_drawHeader(s_viewState.calibTurbidityStep == 0
+                               ? "Turbidity (1/2)" : "Turbidity (2/2)");
 
             char vStr[8];
             dtostrf(s_view.turbidityVoltage, 4, 2, vStr);
@@ -537,18 +538,22 @@ static void drawCalibrationSub() {
             snprintf(lineBuf, sizeof(lineBuf), "Volt   : %s V", p);
             g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
-            char vcStr[8];
-            dtostrf(s_viewCalib.turbidityVClear, 4, 2, vcStr);
-            p = vcStr; while (*p == ' ') p++;
-            snprintf(lineBuf, sizeof(lineBuf), "V_Clear: %s V", p);
-            g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
-
             if (s_viewState.calibSaving) {
                 g_u8g2.drawStr(2, y, "Menyimpan...");
+            } else if (s_viewState.calibTurbidityStep == 0) {
+                g_u8g2.drawStr(2, y, "Air jernih: OK ambil");
             } else {
-                g_u8g2.drawStr(2, y, "Tekan OK: Lock 0 NTU");
+                snprintf(lineBuf, sizeof(lineBuf), "Std: %u NTU", s_viewState.calibTurbidityTarget);
+                g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
+                char clearStr[8];
+                dtostrf(s_viewState.calibTurbidityVClear, 4, 2, clearStr);
+                p = clearStr; while (*p == ' ') p++;
+                snprintf(lineBuf, sizeof(lineBuf), "V0 : %s V", p);
+                g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
+                g_u8g2.drawStr(2, y, "UP/DN atur OK simpan");
             }
-            display_drawStatusBar("Air Aquades", "BACK:Batal");
+            display_drawStatusBar(s_viewState.calibTurbidityStep == 0
+                                  ? "Air jernih 0 NTU" : "Larutan standar", "BACK:Batal");
             break;
         }
 
@@ -604,7 +609,7 @@ static void drawSettings() {
             g_u8g2.drawStr(100, y, valueBuf);
         }
     }
-    display_drawStatusBar("OK:Pilih", "BACK:Menu");
+    display_drawStatusBar(s_viewState.calibSaving ? "Menyimpan..." : "OK:Pilih", "BACK:Menu");
 }
 
 static void drawAbout() {
@@ -762,6 +767,8 @@ void gui_update(const ButtonEventMsg& msg) {
                     transitionToLocked(MenuState::CALIBRATION_TDS);
                 } else if (g_systemState.cursorIndex == 1) {
                     transitionToLocked(MenuState::CALIBRATION_TURBIDITY);
+                    g_systemState.calibTurbidityStep = 0;
+                    g_systemState.calibTurbidityVClear = 0.0f;
                 } else if (g_systemState.cursorIndex == 2) {
                     transitionToLocked(MenuState::CALIBRATION_TEMPERATURE);
                 } else if (g_systemState.cursorIndex == 3) {
@@ -812,14 +819,36 @@ void gui_update(const ButtonEventMsg& msg) {
             break;
 
         case MenuState::CALIBRATION_TURBIDITY:
-            if (isActivate && msg.id == ButtonID::OK) {
+            if (s_viewState.calibTurbidityStep == 0 && isActivate && msg.id == ButtonID::OK) {
                 float volt = g_sensorData.turbidityVoltage;
                 if (volt > TURBIDITY_VCLEAR_MIN) {
-                    g_calibParams.turbidityVClear = volt;
+                    g_systemState.calibTurbidityVClear = volt;
+                    g_systemState.calibTurbidityStep = 1;
+                    g_systemState.calibTurbidityTarget = static_cast<uint16_t>(g_calibParams.turbidityNtuStandard);
+                    g_systemState.displayDirty = true;
+                }
+            } else if (s_viewState.calibTurbidityStep == 1 && isRepeatable && msg.id == ButtonID::UP) {
+                if (g_systemState.calibTurbidityTarget + TURBIDITY_NTU_STANDARD_STEP <= TURBIDITY_NTU_STANDARD_MAX) {
+                    g_systemState.calibTurbidityTarget += TURBIDITY_NTU_STANDARD_STEP;
+                }
+                g_systemState.displayDirty = true;
+            } else if (s_viewState.calibTurbidityStep == 1 && isRepeatable && msg.id == ButtonID::DOWN) {
+                if (g_systemState.calibTurbidityTarget > TURBIDITY_NTU_STANDARD_MIN + TURBIDITY_NTU_STANDARD_STEP - 1) {
+                    g_systemState.calibTurbidityTarget -= TURBIDITY_NTU_STANDARD_STEP;
+                }
+                g_systemState.displayDirty = true;
+            } else if (s_viewState.calibTurbidityStep == 1 && isActivate && msg.id == ButtonID::OK) {
+                const float volt = g_sensorData.turbidityVoltage;
+                const float deltaV = g_systemState.calibTurbidityVClear - volt;
+                if (g_sensorData.turbidityStatus == SensorStatus::OK &&
+                    deltaV >= TURBIDITY_MIN_CALIBRATION_DELTA_V) {
+                    g_calibParams.turbidityVClear = g_systemState.calibTurbidityVClear;
+                    g_calibParams.turbidityVStandard = volt;
+                    g_calibParams.turbidityNtuStandard = static_cast<float>(g_systemState.calibTurbidityTarget);
                     storage_requestSave(g_calibParams);
                     g_systemState.calibSaving = true;
+                    transitionToLocked(MenuState::CALIBRATION);
                 }
-                transitionToLocked(MenuState::CALIBRATION);
             } else if (isActivate && msg.id == ButtonID::BACK) {
                 transitionToLocked(MenuState::CALIBRATION);
             }
@@ -859,6 +888,10 @@ void gui_update(const ButtonEventMsg& msg) {
                     } else if (g_systemState.cursorIndex == SETTINGS_IDX_RESET) {
                         g_systemState.settingsBrightness = DISPLAY_DEFAULT_BRIGHTNESS;
                         g_systemState.settingsContrast = DISPLAY_DEFAULT_CONTRAST;
+                        g_calibParams.displayBrightness = DISPLAY_DEFAULT_BRIGHTNESS;
+                        g_calibParams.displayContrast = DISPLAY_DEFAULT_CONTRAST;
+                        storage_requestSave(g_calibParams);
+                        g_systemState.calibSaving = true;
                         g_systemState.displayDirty = true;
                     } else if (g_systemState.cursorIndex == SETTINGS_IDX_INFO) {
                         transitionToLocked(MenuState::ABOUT);
@@ -883,6 +916,10 @@ void gui_update(const ButtonEventMsg& msg) {
                 } else if (isActivate && (msg.id == ButtonID::OK ||
                                           msg.id == ButtonID::BACK)) {
                     g_systemState.settingsAdjustMode = false;
+                    g_calibParams.displayBrightness = g_systemState.settingsBrightness;
+                    g_calibParams.displayContrast = g_systemState.settingsContrast;
+                    storage_requestSave(g_calibParams);
+                    g_systemState.calibSaving = true;
                     g_systemState.displayDirty = true;
                 }
             }

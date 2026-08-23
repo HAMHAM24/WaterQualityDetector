@@ -222,10 +222,16 @@ uint16_t sensors_readTurbidityRaw() {
 }
 
 float sensors_voltageToNtu(float voltage) {
-    // SEN0189 mengeluarkan tegangan tinggi saat air jernih; makin keruh,
-    // tegangan makin turun. NTU dihitung sebagai selisih terhadap tegangan
-    // air jernih hasil kalibrasi.
-    float ntu = (g_calibParams.turbidityVClear - voltage) * TURBIDITY_NTU_PER_VOLT;
+    // Dua titik: 0 NTU (Vclear) dan larutan standar custom (Vstandard).
+    // Bila titik kedua belum sah, gunakan slope legacy agar alat tetap bekerja.
+    float slope = TURBIDITY_NTU_PER_VOLT;
+    const float deltaV = g_calibParams.turbidityVClear - g_calibParams.turbidityVStandard;
+    if (g_calibParams.turbidityVStandard > 0.0f &&
+        deltaV >= TURBIDITY_MIN_CALIBRATION_DELTA_V) {
+        slope = g_calibParams.turbidityNtuStandard / deltaV;
+    }
+
+    float ntu = (g_calibParams.turbidityVClear - voltage) * slope;
 
     if (ntu < 0.0f) ntu = 0.0f;
     if (ntu > 3000.0f) ntu = 3000.0f; // Limit to typical sensor max
