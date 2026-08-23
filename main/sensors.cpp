@@ -265,7 +265,7 @@ void sensors_processFuzzy() {
     float tdsSnapshot = 0.0f;
     float turbSnapshot = 0.0f;
     bool tempValid = false;
-    WaterParameter activeParam = WaterParameter::AIR_MINUM;
+    WaterParameter activeParam = WaterParameter::AIR_MINUM_HIGIENE;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) != pdTRUE) {
         return; // gagal mengambil mutex: lewati siklus ini, jangan pakai data basi
@@ -288,23 +288,17 @@ void sensors_processFuzzy() {
     KualitasAir_t qStatus = STATUS_TIDAK_LOLOS;
     StatusSuhu_t tStatus = SUHU_IDEAL;
 
-    if (activeParam == WaterParameter::PEMANDIAN_UMUM) {
-        // Mode Pemandian Umum: Evaluasi Threshold Langsung (Non-Fuzzy)
-        // Berdasarkan Permenkes No. 2/2023 Tabel 10: Suhu 15-35 C, Turbidity < 50 NTU
-        thResult = Threshold_CekPemandian(tempSnapshot, turbSnapshot);
+    if (activeParam == WaterParameter::PEMANDIAN_KOLAM) {
+        // Mode Pemandian / Kolam: Evaluasi Threshold Langsung (Non-Fuzzy)
+        // Ambang batas gabungan konservatif: Suhu 16-35 C, Turbidity < 0.5 NTU, TDS bypass
+        thResult = Threshold_CekPemandianKolam(tempSnapshot, turbSnapshot);
         skor = thResult.semuaAman ? 1.0f : 0.0f;
         qStatus = thResult.semuaAman ? STATUS_SANGAT_LAYAK : STATUS_TIDAK_LOLOS;
         tStatus = thResult.suhuAman ? SUHU_IDEAL : SUHU_EKSTREM;
     } else {
-        // Mode Air Minum & Higiene Sanitasi: Evaluasi Fuzzy Sugeno
+        // Mode Air Minum & Higiene Sanitasi: Evaluasi Fuzzy Sugeno (3 input)
         dTemp = fabs(tempSnapshot - BASE_ROOM_TEMP);
-
-        if (activeParam == WaterParameter::AIR_MINUM) {
-            skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
-        } else {
-            skor = FuzzyKualitasAir_HitungSkor_Higiene(profil, tdsComp, turbSnapshot);
-        }
-
+        skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
         qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
         tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(dTemp, profil) : SUHU_IDEAL;
     }
