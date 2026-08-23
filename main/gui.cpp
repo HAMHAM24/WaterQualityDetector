@@ -72,6 +72,7 @@ static void transitionToLocked(MenuState newState) {
     g_systemState.currentMenu = newState;
     g_systemState.cursorIndex = 0;
     g_systemState.measurementSubPage = 0;
+    g_systemState.aboutSubPage = 0;
     g_systemState.settingsAdjustMode = false;
     g_systemState.displayDirty = true;
 }
@@ -570,28 +571,46 @@ static void drawSettings() {
 }
 
 static void drawAbout() {
-    display_drawHeader("Tentang Alat");
-    g_u8g2.setFont(u8g2_font_5x7_tf);
+    if (s_viewState.aboutSubPage == 0) {
+        display_drawHeader("Tentang (1/2)");
+        g_u8g2.setFont(u8g2_font_6x10_tf);
+        uint8_t y = MENU_FIRST_LINE_Y;
 
-    char line[48];
-    uint8_t y = MENU_FIRST_LINE_Y;
+        g_u8g2.drawStr(2, y, "Alat: WQ Analyzer");
+        y += MENU_LINE_HEIGHT;
 
-    snprintf(line, sizeof(line), "Alat: WQ Analyzer");
-    g_u8g2.drawStr(2, y, line); y += 9;
+        char fwLine[32];
+        snprintf(fwLine, sizeof(fwLine), "FW  : v%s", FIRMWARE_VERSION);
+        g_u8g2.drawStr(2, y, fwLine);
+        y += MENU_LINE_HEIGHT;
 
-    snprintf(line, sizeof(line), "FW  : v%s", FIRMWARE_VERSION);
-    g_u8g2.drawStr(2, y, line); y += 9;
+        g_u8g2.drawStr(2, y, "Reg : Permenkes 2023");
+        y += MENU_LINE_HEIGHT;
 
-    snprintf(line, sizeof(line), "HW  : Blackpill F401CC");
-    g_u8g2.drawStr(2, y, line); y += 9;
+        g_u8g2.drawStr(2, y, "RTOS: FreeRTOS Aktif");
 
-    snprintf(line, sizeof(line), "MCU : %s", MCU_NAME);
-    g_u8g2.drawStr(2, y, line); y += 9;
+        display_drawStatusBar("DN:Hardware", "BACK:Menu");
+    } else {
+        display_drawHeader("Tentang (2/2)");
+        g_u8g2.setFont(u8g2_font_6x10_tf);
+        uint8_t y = MENU_FIRST_LINE_Y;
 
-    snprintf(line, sizeof(line), "RTOS: FreeRTOS Aktif");
-    g_u8g2.drawStr(2, y, line);
+        g_u8g2.drawStr(2, y, "HW  : Blackpill F401");
+        y += MENU_LINE_HEIGHT;
 
-    display_drawStatusBar("BACK:Kembali", nullptr);
+        g_u8g2.drawStr(2, y, "MCU : STM32F401CC");
+        y += MENU_LINE_HEIGHT;
+
+        g_u8g2.drawStr(2, y, "OLED: 1.3 SH1106");
+        y += MENU_LINE_HEIGHT;
+
+        char line[32];
+        snprintf(line, sizeof(line), "Heap: %lu B",
+                 static_cast<unsigned long>(xPortGetFreeHeapSize()));
+        g_u8g2.drawStr(2, y, line);
+
+        display_drawStatusBar("UP:Firmware", "BACK:Menu");
+    }
 }
 
 static void drawFactoryResetConfirm() {
@@ -661,6 +680,7 @@ void gui_init() {
     g_systemState.currentMenu = MenuState::SPLASH;
     g_systemState.cursorIndex = 0;
     g_systemState.measurementSubPage = 0;
+    g_systemState.aboutSubPage = 0;
     g_systemState.settingsAdjustMode = false;
     g_systemState.calibSaving = false;
     g_systemState.displayDirty = true;
@@ -900,7 +920,17 @@ void gui_update(const ButtonEventMsg& msg) {
             break;
 
         case MenuState::ABOUT:
-            if (isActivate && msg.id == ButtonID::BACK) {
+            if (isActivate && (msg.id == ButtonID::DOWN || msg.id == ButtonID::OK)) {
+                if (g_systemState.aboutSubPage == 0) {
+                    g_systemState.aboutSubPage = 1;
+                    g_systemState.displayDirty = true;
+                }
+            } else if (isActivate && msg.id == ButtonID::UP) {
+                if (g_systemState.aboutSubPage == 1) {
+                    g_systemState.aboutSubPage = 0;
+                    g_systemState.displayDirty = true;
+                }
+            } else if (isActivate && msg.id == ButtonID::BACK) {
                 transitionToLocked(g_systemState.previousMenu);
             }
             break;

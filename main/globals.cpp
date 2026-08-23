@@ -69,6 +69,7 @@ bool globals_init() {
     g_systemState.previousMenu       = MenuState::SPLASH;
     g_systemState.cursorIndex        = 0;
     g_systemState.measurementSubPage = 0;
+    g_systemState.aboutSubPage       = 0;
     g_systemState.calibTdsTarget     = TDS_CALIB_TARGET_DEFAULT;
     g_systemState.calibTurbidityTarget = static_cast<uint16_t>(g_calibParams.turbidityNtuStandard);
     g_systemState.calibTurbidityStep = 0;

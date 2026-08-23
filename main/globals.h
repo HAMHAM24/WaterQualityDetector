@@ -128,6 +128,7 @@ struct SystemState {
     MenuState previousMenu;           // halaman sebelumnya (untuk tombol BACK)
     uint8_t cursorIndex;              // index kursor pada menu berjalan
     uint8_t measurementSubPage;       // 0 = Data Sensor + Skor, 1 = Detail Fuzzy & Rekomendasi
+    uint8_t aboutSubPage;             // 0 = Firmware & Sistem, 1 = Hardware & Memori
 
     uint16_t calibTdsTarget;          // nilai acuan larutan TDS pada layar kalibrasi
     uint16_t calibTurbidityTarget;    // nilai custom titik kedua turbidity (NTU)
