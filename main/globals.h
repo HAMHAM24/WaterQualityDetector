@@ -86,11 +86,12 @@ struct SensorData {
     float turbidityVoltage;      // tegangan sisi sensor setelah koreksi divider
     float turbidityFiltered;     // kekeruhan hasil konversi (NTU)
 
-    // --- Hasil Olahan Fuzzy Logic ---
+    // --- Hasil Olahan Fuzzy Logic & Threshold ---
     float tdsCompensated;        // TDS setelah kompensasi suhu
     float fuzzyScore;            // Skor Fuzzy Sugeno (0.0 - 1.0)
     KualitasAir_t qualityStatus; // SANGAT_LAYAK, LAYAK_SARING_RINGAN, dll
     StatusSuhu_t tempStatus;     // IDEAL, MENYIMPANG, EKSTREM
+    ThresholdResult_t thresholdResult; // Hasil evaluasi threshold (khusus Pemandian)
 
     SensorStatus temperatureStatus;
     SensorStatus tdsStatus;

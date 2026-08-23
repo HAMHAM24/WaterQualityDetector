@@ -47,6 +47,7 @@ bool globals_init() {
     g_sensorData.fuzzyScore         = 0.0f;
     g_sensorData.qualityStatus      = STATUS_TIDAK_LOLOS;
     g_sensorData.tempStatus         = SUHU_IDEAL;
+    g_sensorData.thresholdResult    = { false, false, false };
     g_sensorData.temperatureStatus  = SensorStatus::ERROR;
     g_sensorData.tdsStatus          = SensorStatus::ERROR;
     g_sensorData.turbidityStatus    = SensorStatus::ERROR;
