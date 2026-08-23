@@ -133,11 +133,11 @@ Menggunakan **Fuzzy Inference System (FIS) Sugeno Orde-0** dengan **3 input, 27 
 3. **Deviasi Suhu $\Delta$T**: Ideal ($\le 3^\circ\text{C}$ dari suhu ruang), Menyimpang ($2-6^\circ\text{C}$), Ekstrem ($\ge 8^\circ\text{C}$)
 
 - **Output Skor (0.00 – 1.00)** dengan 5 level status:
-  - **Skor $\ge 0.875$** $\rightarrow$ **SGT.LAYAK** (`"Sangat Baik & Aman"`)
-  - **$0.625 \le \text{Skor} < 0.875$** $\rightarrow$ **LYK.SRING** (`"Perlu Saring Sedimen Ringan"`)
-  - **$0.375 \le \text{Skor} < 0.625$** $\rightarrow$ **CUKUP** (`"Kualitas Cukup, Proses Air"`)
-  - **$0.125 \le \text{Skor} < 0.375$** $\rightarrow$ **KRITIS** (`"Kritis, Butuh Proses Intensif"`)
-  - **Skor $< 0.125$** $\rightarrow$ **TDK.LOLOS** (`"Bahaya! Tidak Lolos Uji"`)
+  - **Skor $\ge 0.875$** $\rightarrow$ **S.LAYAK** (`"Air Sangat Layak"`)
+  - **$0.625 \le \text{Skor} < 0.875$** $\rightarrow$ **LAYAK** (`"Layak, Saring Ringan"`)
+  - **$0.375 \le \text{Skor} < 0.625$** $\rightarrow$ **CUKUP** (`"Cukup, Perlu Olah Air"`)
+  - **$0.125 \le \text{Skor} < 0.375$** $\rightarrow$ **KURANG** (`"Kurang, Butuh Saring Total"`)
+  - **Skor $< 0.125$** $\rightarrow$ **T.LAYAK** (`"Tidak Layak / Dilarang"`)
 
 ---
 

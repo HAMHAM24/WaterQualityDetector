@@ -230,11 +230,11 @@ KualitasAir_t FuzzyKualitasAir_GetStatusProfil(const FuzzyProfil_t* profil, floa
 const char* FuzzyKualitasAir_GetPesan(KualitasAir_t status)
 {
     switch (status) {
-        case STATUS_SANGAT_LAYAK:       return "Sangat Baik & Aman";
-        case STATUS_LAYAK_SARING_RINGAN:return "Perlu Saring Sedimen Ringan";
-        case STATUS_CUKUP_PROSES_SEDANG:return "Kualitas Cukup, Proses Air";
-        case STATUS_KRITIS:             return "Kritis, Butuh Proses Intensif";
-        case STATUS_TIDAK_LOLOS:        return "Bahaya! Tidak Lolos Uji";
+        case STATUS_SANGAT_LAYAK:       return "Air Sangat Layak";
+        case STATUS_LAYAK_SARING_RINGAN:return "Layak, Saring Ringan";
+        case STATUS_CUKUP_PROSES_SEDANG:return "Cukup, Perlu Olah Air";
+        case STATUS_KRITIS:             return "Kurang, Butuh Saring Total";
+        case STATUS_TIDAK_LOLOS:        return "Tidak Layak / Dilarang";
         default:                        return "Unknown";
     }
 }
@@ -242,11 +242,11 @@ const char* FuzzyKualitasAir_GetPesan(KualitasAir_t status)
 const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status)
 {
     switch (status) {
-        case STATUS_SANGAT_LAYAK:       return "SGT.LAYAK";
-        case STATUS_LAYAK_SARING_RINGAN:return "LYK.SRING";
+        case STATUS_SANGAT_LAYAK:       return "S.LAYAK";
+        case STATUS_LAYAK_SARING_RINGAN:return "LAYAK";
         case STATUS_CUKUP_PROSES_SEDANG:return "CUKUP";
-        case STATUS_KRITIS:             return "KRITIS";
-        case STATUS_TIDAK_LOLOS:        return "TDK.LOLOS";
+        case STATUS_KRITIS:             return "KURANG";
+        case STATUS_TIDAK_LOLOS:        return "T.LAYAK";
         default:                        return "UNKNOWN";
     }
 }
@@ -255,8 +255,8 @@ const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status)
 {
     switch (status) {
         case SUHU_IDEAL:      return "Ideal";
-        case SUHU_MENYIMPANG: return "Menyimpang";
-        case SUHU_EKSTREM:    return "Ekstrem";
+        case SUHU_MENYIMPANG: return "Batas";
+        case SUHU_EKSTREM:    return "Ekstr";
         default:              return "Unknown";
     }
 }

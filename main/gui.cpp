@@ -266,7 +266,7 @@ static void drawMeasurement() {
         // =====================================================================
         if (s_viewState.measurementSubPage == 0) {
             // --- HALAMAN 1: DASHBOARD PER-PARAMETER ---
-            display_drawHeader("Pemandian/Kolam(1/2)");
+            display_drawHeader("Pemandian (1/2)");
             uint8_t y = MENU_FIRST_LINE_Y;
             g_u8g2.setFont(u8g2_font_6x10_tf);
 
@@ -321,26 +321,26 @@ static void drawMeasurement() {
 
         } else {
             // --- HALAMAN 2: DETAIL ACUAN & STATUS PER-PARAMETER ---
-            display_drawHeader("Pemandian/Kolam(2/2)");
+            display_drawHeader("Pemandian (2/2)");
             uint8_t y = MENU_FIRST_LINE_Y;
             g_u8g2.setFont(u8g2_font_6x10_tf);
 
-            g_u8g2.drawStr(2, y, "Acuan: Permenkes 2023");
+            g_u8g2.drawStr(2, y, "Dasar: Permenkes 2/23");
             y += MENU_LINE_HEIGHT;
 
             char l1[32];
             const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK]";
-            snprintf(l1, sizeof(l1), "Suhu : 16-35 C  %s", sTag);
+            snprintf(l1, sizeof(l1), "Suhu : 16-35C %s", sTag);
             g_u8g2.drawStr(2, y, l1);
             y += MENU_LINE_HEIGHT;
 
             char l2[32];
             const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK]";
-            snprintf(l2, sizeof(l2), "Turb : <0.5 NTU %s", tbTag);
+            snprintf(l2, sizeof(l2), "Turb : <0.5NTU %s", tbTag);
             g_u8g2.drawStr(2, y, l2);
             y += MENU_LINE_HEIGHT;
 
-            g_u8g2.drawStr(2, y, "TDS  : Tdk diatur [BYP]");
+            g_u8g2.drawStr(2, y, "TDS  : Bebas [BYPASS]");
 
             display_drawStatusBar("UP:Kembali", "BACK:Menu");
         }
@@ -352,7 +352,7 @@ static void drawMeasurement() {
     // =========================================================================
     if (s_viewState.measurementSubPage == 0) {
         // --- HALAMAN 1: DATA SENSOR + SKOR FUZZY (DASHBOARD) ---
-        display_drawHeader("Air Minum & Hig (1/2)");
+        display_drawHeader("Air Minum (1/2)");
         uint8_t y = MENU_FIRST_LINE_Y;
 
         // Suhu + status suhu
@@ -408,8 +408,8 @@ static void drawMeasurement() {
             dtostrf(s_view.temperature, 4, 1, tStr);
             char* p = tStr;
             while (*p == ' ') p++;
-            snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %s (%s C)",
-                     FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus), p);
+            snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %sC (%s)", p,
+                     FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus));
         } else {
             snprintf(lineBuf, sizeof(lineBuf), "Suhu  : ERROR");
         }
@@ -457,7 +457,7 @@ static void drawCalibrationSub() {
             if (s_viewState.calibSaving) {
                 g_u8g2.drawStr(2, y, "Menyimpan...");
             } else {
-                g_u8g2.drawStr(2, y, "UP/DN:Target OK:Simpan");
+                g_u8g2.drawStr(2, y, "UP/DN:Atur  OK:Simpan");
             }
             display_drawStatusBar("Celup larutan", "BACK:Batal");
             break;
@@ -506,9 +506,9 @@ static void drawCalibrationSub() {
             if (s_viewState.calibSaving) {
                 g_u8g2.drawStr(2, y, "Menyimpan...");
             } else {
-                g_u8g2.drawStr(2, y, "LF/RT:Offset OK:Simpan");
+                g_u8g2.drawStr(2, y, "LF/RT:Atur  OK:Simpan");
             }
-            display_drawStatusBar("Samakan termometer", "BACK:Batal");
+            display_drawStatusBar("Cek termometer", "BACK:Batal");
             break;
         }
 
@@ -549,13 +549,13 @@ static void drawAbout() {
     char line[48];
     uint8_t y = MENU_FIRST_LINE_Y;
 
-    snprintf(line, sizeof(line), "Alat: %s", FIRMWARE_NAME);
+    snprintf(line, sizeof(line), "Alat: WQ Analyzer");
     g_u8g2.drawStr(2, y, line); y += 9;
 
     snprintf(line, sizeof(line), "FW  : v%s", FIRMWARE_VERSION);
     g_u8g2.drawStr(2, y, line); y += 9;
 
-    snprintf(line, sizeof(line), "HW  : %s", HARDWARE_VERSION);
+    snprintf(line, sizeof(line), "HW  : Blackpill F401CC");
     g_u8g2.drawStr(2, y, line); y += 9;
 
     snprintf(line, sizeof(line), "MCU : %s", MCU_NAME);
