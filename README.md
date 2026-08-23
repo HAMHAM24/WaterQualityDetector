@@ -148,6 +148,23 @@ Berdasarkan Permenkes No. 2/2023 Tabel 10 (Pemandian Umum) dan Tabel Kolam Renan
 - **TDS**: **Bypass / Tidak Diatur** (nilai sensor tetap ditampilkan dengan tag `[BYP]`)
 - **Status Akhir**: **`LAYAK`** jika kedua parameter lolos, atau **`TIDAK LAYAK`** jika ada parameter yang gagal.
 
+### Kalibrasi Turbidity Dua Titik
+Sensor turbidity memakai kalibrasi dua titik agar slope NTU sesuai karakteristik
+sensor yang dipakai. Langkah dari menu **Kalibrasi Turbidity**:
+1. Celupkan sensor ke air jernih (0 NTU), lalu tekan `OK` untuk mengambil titik pertama.
+2. Celupkan sensor ke larutan standar. Atur nilai custom `1-3000 NTU` dengan `UP/DOWN`.
+3. Tekan `OK` untuk menyimpan kedua titik ke EEPROM Flash.
+
+Rumus yang digunakan:
+
+```text
+slope = NTU_standar / (V_jernih - V_standar)
+NTU   = (V_jernih - V_ukur) x slope
+```
+
+Jika titik kedua belum dikalibrasi, firmware memakai slope fallback `30 NTU/V`.
+Untuk sensor yang disuplai 3.3V, `TURBIDITY_INPUT_DIVIDER` tetap `1.0`.
+
 ---
 
 ## 9. Antarmuka GUI & Katalog Tampilan Layar OLED 1.3" (128x64)

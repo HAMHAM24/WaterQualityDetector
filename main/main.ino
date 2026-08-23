@@ -57,6 +57,14 @@ void setup() {
     Serial.print(F("Pemandian (28C, 2.5NTU): "));
     Serial.println(resGagal.semuaAman ? F("[LAYAK]") : F("[TDK LAYAK]"));
 
+    // Validasi rumus turbidity dua titik: V0=3.00V, V100=2.00V.
+    // Sampel 2.50V harus berada di tengah, yaitu 50 NTU.
+    const float slopeTurb = 100.0f / (3.00f - 2.00f);
+    const float ntuTest = (3.00f - 2.50f) * slopeTurb;
+    Serial.print(F("Turb 2 titik (2.50V): "));
+    Serial.print(ntuTest, 1);
+    Serial.println(F(" NTU"));
+
     Serial.println(F("========================================"));
 
     if (!tasks_createAll()) {
