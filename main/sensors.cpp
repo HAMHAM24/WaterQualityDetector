@@ -154,10 +154,11 @@ float sensors_voltageToTds(float voltage, float temperature) {
     // diperlakukan sebagai suhu acuan agar tidak menyimpangkan hasil.
     float temperatureForComp = temperature;
     if (temperatureForComp < 1.0f || temperatureForComp > 60.0f) {
-        temperatureForComp = TDS_TEMP_REFERENCE;
+        temperatureForComp = BASE_ROOM_TEMP;
     }
 
-    float factor = 1.0f + TDS_TEMP_COEFFICIENT * (temperatureForComp - TDS_TEMP_REFERENCE);
+    // Menggunakan base room temp untuk perhitungan deviasi offset
+    float factor = 1.0f + 0.02f * (temperatureForComp - 25.0f);
     if (factor < 0.1f) {
         factor = 0.1f;   // proteksi pembagian mendekati nol
     }
@@ -172,7 +173,7 @@ float sensors_voltageToTds(float voltage, float temperature) {
     float ppm = ec * TDS_EC_TO_PPM_FACTOR * g_calibParams.tdsKFactor;
 
     if (ppm < 0.0f) ppm = 0.0f;                 // polinomial bisa negatif di V sangat kecil
-    if (ppm > TDS_PPM_MAX) ppm = TDS_PPM_MAX;   // jepit ke batas wajar sensor
+    if (ppm > 2000.0f) ppm = 2000.0f;           // jepit ke batas wajar sensor
 
     return ppm;
 }
@@ -188,7 +189,7 @@ void sensors_updateTDS() {
     const float voltage = sensors_adcToVoltage(filteredRaw, TDS_INPUT_DIVIDER);
 
     // Suhu terakhir dibaca lebih dulu agar kompensasi memakai nilai terbaru.
-    float temperature = TDS_TEMP_REFERENCE;
+    float temperature = BASE_ROOM_TEMP;
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         if (g_sensorData.temperatureStatus == SensorStatus::OK) {
             temperature = g_sensorData.temperature;
@@ -227,7 +228,7 @@ float sensors_voltageToNtu(float voltage) {
     float ntu = (g_calibParams.turbidityVClear - voltage) * TURBIDITY_NTU_PER_VOLT;
 
     if (ntu < 0.0f) ntu = 0.0f;
-    if (ntu > TURBIDITY_NTU_MAX) ntu = TURBIDITY_NTU_MAX;
+    if (ntu > 3000.0f) ntu = 3000.0f; // Limit to typical sensor max
 
     return ntu;
 }
@@ -260,11 +261,11 @@ void sensors_updateTurbidity() {
  *        peruntukan air yang sedang aktif.
  */
 void sensors_processFuzzy() {
-    float tempSnapshot = TDS_TEMP_REFERENCE;
+    float tempSnapshot = BASE_ROOM_TEMP;
     float tdsSnapshot = 0.0f;
     float turbSnapshot = 0.0f;
     bool tempValid = false;
-    WaterParameter activeParam = WaterParameter::AIR_MINUM_HIGIENE;
+    WaterParameter activeParam = WaterParameter::AIR_MINUM;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) != pdTRUE) {
         return; // gagal mengambil mutex: lewati siklus ini, jangan pakai data basi
@@ -278,23 +279,57 @@ void sensors_processFuzzy() {
     activeParam  = g_systemState.activeParameter;
     xSemaphoreGive(g_dataMutex);
 
-    // Kompensasi suhu sudah diterapkan di sensors_voltageToTds(), sehingga
-    // nilai tdsFiltered memang nilai terkompensasi. Field tdsCompensated
-    // dipertahankan agar tampilan dan telemetri tetap eksplisit.
     const float tdsComp = tdsSnapshot;
-
     const FuzzyProfil_t* profil = globals_getProfile(activeParam);
-    const float suhuForFuzzy = tempValid ? tempSnapshot : FuzzyKualitasAir_SuhuNetral();
-    const float skor = FuzzyKualitasAir_HitungSkorProfil(profil, tdsComp, turbSnapshot, suhuForFuzzy);
+    float skor = 0.0f;
+    float dTemp = 0.0f;
+
+    // Kalkulasi nilai delta suhu sesuai peruntukan
+    if (activeParam == WaterParameter::PEMANDIAN_UMUM) {
+        // Delta rentang mutlak 15-35 C
+        float lowDiff = (15.0f - tempSnapshot);
+        float highDiff = (tempSnapshot - 35.0f);
+        float maxDiff = (lowDiff > highDiff) ? lowDiff : highDiff;
+        dTemp = (maxDiff > 0.0f) ? maxDiff : 0.0f;
+    } else {
+        // Delta deviasi dari suhu ruang referensi
+        dTemp = fabs(tempSnapshot - BASE_ROOM_TEMP);
+    }
+
+    // Call the specific fuzzy engine based on parameter
+    switch (activeParam) {
+        case WaterParameter::AIR_MINUM:
+            skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
+            break;
+        case WaterParameter::HIGIENE_SANITASI:
+            skor = FuzzyKualitasAir_HitungSkor_Higiene(profil, tdsComp, turbSnapshot);
+            break;
+        case WaterParameter::PEMANDIAN_UMUM:
+            skor = FuzzyKualitasAir_HitungSkor_Pemandian(profil, dTemp, turbSnapshot);
+            break;
+        default:
+            skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
+            break;
+    }
+
     const KualitasAir_t qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
-    const StatusSuhu_t tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(tempSnapshot)
-                                            : SUHU_NORMAL;
+    const StatusSuhu_t tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(dTemp, profil)
+                                            : SUHU_IDEAL;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         g_sensorData.tdsCompensated = tdsComp;
         g_sensorData.fuzzyScore     = skor;
         g_sensorData.qualityStatus  = qStatus;
         g_sensorData.tempStatus     = tStatus;
+        
+        // Atur flag bila TDS di bypass (misalnya di Pemandian)
+        if (activeParam == WaterParameter::PEMANDIAN_UMUM) {
+            g_sensorData.tdsStatus = SensorStatus::NOT_USED;
+        } else if (g_sensorData.tdsStatus == SensorStatus::NOT_USED) {
+            // Restore status jika diubah dari menu lain, walau aktualnya butuh pembacaan ulang.
+            // Asumsi siklus updateTDS akan memperbaruinya nanti.
+        }
+
         g_systemState.displayDirty  = true;
         xSemaphoreGive(g_dataMutex);
     }

@@ -1,9 +1,6 @@
 /**
  * @file    main.ino
  * @brief   Firmware Water Quality Analyzer — entry point Arduino.
- * @details Target hardware : STM32F401CCU6 (Blackpill)
- *          Framework       : STM32duino (Arduino Core STM32)
- *          RTOS            : STM32FreeRTOS
  */
 
 #include "config.h"
@@ -20,8 +17,6 @@ void setup() {
     Serial.begin(SERIAL_BAUD_RATE);
 
     if (!globals_init()) {
-        // Mutex atau queue gagal dibuat (heap FreeRTOS tidak cukup atau
-        // kerusakan memori). Tidak bisa lanjut: cetak pesan fatal dan henti.
         Serial.println(F("FATAL: globals_init() gagal. Free heap mungkin habis."));
         while (true) {}
     }
@@ -31,49 +26,43 @@ void setup() {
     display_init();
     gui_init();
 
-    // --- TEST VALIDASI BASELINE (TDS=350, Turb=10, Suhu=28) ---
-    float testTds = 350.0f;
-    float testTurb = 10.0f;
-    float testSuhu = 28.0f;
-    float testSkor = FuzzyKualitasAir_HitungSkor(testTds, testTurb, testSuhu);
-    KualitasAir_t testStatus = FuzzyKualitasAir_GetStatus(testSkor);
+    // --- TEST VALIDASI BASELINE ---
+    const FuzzyProfil_t* pAirMinum = globals_getProfile(WaterParameter::AIR_MINUM);
+    const FuzzyProfil_t* pHigiene = globals_getProfile(WaterParameter::HIGIENE_SANITASI);
+    const FuzzyProfil_t* pPemandian = globals_getProfile(WaterParameter::PEMANDIAN_UMUM);
 
     Serial.println(F("========================================"));
-    Serial.println(F("    VALIDASI AUTOMATIS FUZZY LOGIC    "));
-    Serial.println(F("  3 INPUT: TDS + Turbidity + Suhu     "));
+    Serial.println(F("    VALIDASI AUTOMATIS FUZZY SUGENO     "));
     Serial.println(F("========================================"));
-    Serial.print(F("Input  : TDS=350 Turb=10 Suhu=28C\n"));
-    Serial.print(F("Skor   : ")); Serial.print(testSkor, 2);
-    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(testStatus));
-    Serial.println(F("]"));
 
-    // Test 1: air jernih ideal + suhu normal → harus EXCELLENT
-    float s1 = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f, 28.0f);
-    Serial.print(F("Ideal   (50/0.5/28C): "));
+    // Test 1: Air Minum (3 input) - Semua parameter Ideal
+    float s1 = FuzzyKualitasAir_HitungSkor_AirMinum(pAirMinum, 50.0f, 0.5f, 0.0f);
+    Serial.print(F("Air Minum (Ideal)     : "));
     Serial.print(s1, 2);
-    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s1)));
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pAirMinum, s1)));
     Serial.println(F("]"));
 
-    // Test 2: air jernih ideal + dingin → harus GOOD (penalti suhu)
-    float s2 = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f, 22.0f);
-    Serial.print(F("Dingin  (50/0.5/22C): "));
+    // Test 2: Air Minum (3 input) - TDS Batas, Turb Ideal, Temp Ideal -> Harusnya Layak Saring Ringan
+    float s2 = FuzzyKualitasAir_HitungSkor_AirMinum(pAirMinum, 280.0f, 0.5f, 0.0f);
+    Serial.print(F("Air Minum (1 Batas)   : "));
     Serial.print(s2, 2);
-    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s2)));
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pAirMinum, s2)));
     Serial.println(F("]"));
 
-    // Test 3: air jernih ideal + panas → harus GOOD (penalti suhu)
-    float s3 = FuzzyKualitasAir_HitungSkor(50.0f, 0.5f, 34.0f);
-    Serial.print(F("Panas   (50/0.5/34C): "));
+    // Test 3: Higiene Sanitasi (2 input) - Turb Keruh -> Harusnya Kritis/Tidak Lolos
+    float s3 = FuzzyKualitasAir_HitungSkor_Higiene(pHigiene, 100.0f, 15.0f);
+    Serial.print(F("Higiene (Turb Buruk)  : "));
     Serial.print(s3, 2);
-    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s3)));
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pHigiene, s3)));
     Serial.println(F("]"));
 
-    // Test 4: air buruk → harus NOT_SUITABLE
-    float s4 = FuzzyKualitasAir_HitungSkor(1100.0f, 28.0f, 28.0f);
-    Serial.print(F("Buruk   (1100/28/28C): "));
+    // Test 4: Pemandian Umum (2 input bypass TDS) - Temp Ekstrem -> Harusnya Kritis/Tidak Lolos
+    float s4 = FuzzyKualitasAir_HitungSkor_Pemandian(pPemandian, 15.0f, 2.0f);
+    Serial.print(F("Pemandian (Temp Ekstrm): "));
     Serial.print(s4, 2);
-    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatus(s4)));
+    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pPemandian, s4)));
     Serial.println(F("]"));
+
     Serial.println(F("========================================"));
 
     if (!tasks_createAll()) {
@@ -83,11 +72,10 @@ void setup() {
 
     vTaskStartScheduler();
 
-    // Baris di bawah ini seharusnya tidak pernah tercapai.
     Serial.println(F("FATAL: vTaskStartScheduler() gagal dijalankan."));
     while (true) {}
 }
 
 void loop() {
-    // Intentionally empty — FreeRTOS scheduler mengambil alih eksekusi.
+    // Intentionally empty
 }
