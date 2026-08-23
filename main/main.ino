@@ -29,7 +29,6 @@ void setup() {
     // --- TEST VALIDASI BASELINE ---
     const FuzzyProfil_t* pAirMinum = globals_getProfile(WaterParameter::AIR_MINUM);
     const FuzzyProfil_t* pHigiene = globals_getProfile(WaterParameter::HIGIENE_SANITASI);
-    const FuzzyProfil_t* pPemandian = globals_getProfile(WaterParameter::PEMANDIAN_UMUM);
 
     Serial.println(F("========================================"));
     Serial.println(F("    VALIDASI AUTOMATIS FUZZY SUGENO     "));
@@ -56,12 +55,14 @@ void setup() {
     Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pHigiene, s3)));
     Serial.println(F("]"));
 
-    // Test 4: Pemandian Umum (2 input bypass TDS) - Temp Ekstrem -> Harusnya Kritis/Tidak Lolos
-    float s4 = FuzzyKualitasAir_HitungSkor_Pemandian(pPemandian, 15.0f, 2.0f);
-    Serial.print(F("Pemandian (Temp Ekstrm): "));
-    Serial.print(s4, 2);
-    Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pPemandian, s4)));
-    Serial.println(F("]"));
+    // Test 4: Pemandian Umum (Threshold Check Langsung - Suhu 15-35 C, Turb < 50 NTU)
+    ThresholdResult_t resAman = Threshold_CekPemandian(28.0f, 15.0f);
+    Serial.print(F("Pemandian (28C, 15NTU): "));
+    Serial.println(resAman.semuaAman ? F("[LAYAK]") : F("[TDK LAYAK]"));
+
+    ThresholdResult_t resGagal = Threshold_CekPemandian(38.0f, 15.0f);
+    Serial.print(F("Pemandian (38C, 15NTU): "));
+    Serial.println(resGagal.semuaAman ? F("[LAYAK]") : F("[TDK LAYAK]"));
 
     Serial.println(F("========================================"));
 
