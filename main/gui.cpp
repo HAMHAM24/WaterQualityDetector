@@ -266,15 +266,100 @@ static void drawWrappedText(uint8_t x, uint8_t y, const char* text) {
 
 /** @brief Dashboard Hasil Pengukuran & Detail Rekomendasi (Dual-Page View) */
 static void drawMeasurement() {
+    if (s_viewState.activeParameter == WaterParameter::PEMANDIAN_UMUM) {
+        // =====================================================================
+        // MODE PEMANDIAN UMUM — EVALUASI THRESHOLD CHECKER (NON-FUZZY)
+        // =====================================================================
+        if (s_viewState.measurementSubPage == 0) {
+            // --- HALAMAN 1: DASHBOARD PER-PARAMETER ---
+            display_drawHeader("Pemandian (1/2)");
+            uint8_t y = MENU_FIRST_LINE_Y;
+            g_u8g2.setFont(u8g2_font_6x10_tf);
+
+            // 1. Suhu
+            char tempBuf[32];
+            if (s_view.temperatureStatus == SensorStatus::OK) {
+                char tStr[8];
+                dtostrf(s_view.temperature, 4, 1, tStr);
+                char* p = tStr; while (*p == ' ') p++;
+                const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK LAYAK]";
+                snprintf(tempBuf, sizeof(tempBuf), "Suhu: %s C %s", p, sTag);
+            } else {
+                snprintf(tempBuf, sizeof(tempBuf), "Suhu: ERROR");
+            }
+            g_u8g2.drawStr(2, y, tempBuf);
+            y += MENU_LINE_HEIGHT;
+
+            // 2. Turbidity
+            char turbBuf[32];
+            if (s_view.turbidityStatus == SensorStatus::OK) {
+                char tbStr[8];
+                dtostrf(s_view.turbidityFiltered, 4, 1, tbStr);
+                char* p = tbStr; while (*p == ' ') p++;
+                const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK LAYAK]";
+                snprintf(turbBuf, sizeof(turbBuf), "Turb: %s NTU %s", p, tbTag);
+            } else {
+                snprintf(turbBuf, sizeof(turbBuf), "Turb: ERROR");
+            }
+            g_u8g2.drawStr(2, y, turbBuf);
+            y += MENU_LINE_HEIGHT;
+
+            // 3. TDS (tetap ditampilkan nilainya + tag BYPASS)
+            char tdsBuf[32];
+            if (s_view.tdsStatus == SensorStatus::OK) {
+                char tdsStr[8];
+                dtostrf(s_view.tdsCompensated, 4, 1, tdsStr);
+                char* p = tdsStr; while (*p == ' ') p++;
+                snprintf(tdsBuf, sizeof(tdsBuf), "TDS : %s ppm [BYP]", p);
+            } else {
+                snprintf(tdsBuf, sizeof(tdsBuf), "TDS : ERROR");
+            }
+            g_u8g2.drawStr(2, y, tdsBuf);
+            y += MENU_LINE_HEIGHT;
+
+            // 4. Status Keseluruhan (singkat)
+            char stBuf[32];
+            const char* allTag = s_view.thresholdResult.semuaAman ? "LAYAK" : "TIDAK LAYAK";
+            snprintf(stBuf, sizeof(stBuf), "Status: %s", allTag);
+            g_u8g2.drawStr(2, y, stBuf);
+
+            display_drawStatusBar("[DN] Detail", "[BACK] Menu");
+
+        } else {
+            // --- HALAMAN 2: DETAIL ACUAN & STATUS PER-PARAMETER ---
+            display_drawHeader("Pemandian (2/2)");
+            uint8_t y = MENU_FIRST_LINE_Y;
+            g_u8g2.setFont(u8g2_font_6x10_tf);
+
+            g_u8g2.drawStr(2, y, "Dasar: Permenkes 2/23");
+            y += MENU_LINE_HEIGHT;
+
+            char l1[32];
+            const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK]";
+            snprintf(l1, sizeof(l1), "Suhu : 15-35 C  %s", sTag);
+            g_u8g2.drawStr(2, y, l1);
+            y += MENU_LINE_HEIGHT;
+
+            char l2[32];
+            const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK]";
+            snprintf(l2, sizeof(l2), "Turb : < 50 NTU %s", tbTag);
+            g_u8g2.drawStr(2, y, l2);
+            y += MENU_LINE_HEIGHT;
+
+            g_u8g2.drawStr(2, y, "TDS  : Tdk diatur [BYP]");
+
+            display_drawStatusBar("[UP] Dashboard", "[BACK] Menu");
+        }
+        return;
+    }
+
+    // =========================================================================
+    // MODE AIR MINUM & HIGIENE SANITASI — EVALUASI FUZZY SUGENO
+    // =========================================================================
     if (s_viewState.measurementSubPage == 0) {
         // --- HALAMAN 1: DATA SENSOR + SKOR FUZZY (DASHBOARD) ---
-        const char* pageHeader = "Hsl (1/2)";
-        switch (s_viewState.activeParameter) {
-            case WaterParameter::AIR_MINUM: pageHeader = "Air Minum (1/2)"; break;
-            case WaterParameter::HIGIENE_SANITASI: pageHeader = "Higiene (1/2)"; break;
-            case WaterParameter::PEMANDIAN_UMUM: pageHeader = "Pemandian (1/2)"; break;
-            default: break;
-        }
+        const char* pageHeader = (s_viewState.activeParameter == WaterParameter::AIR_MINUM)
+                                     ? "Air Minum (1/2)" : "Higiene (1/2)";
         
         display_drawHeader(pageHeader);
         uint8_t y = MENU_FIRST_LINE_Y;
