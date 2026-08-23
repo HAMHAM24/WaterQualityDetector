@@ -287,6 +287,9 @@ void sensors_processFuzzy() {
     ThresholdResult_t thResult = { false, false, false };
     KualitasAir_t qStatus = STATUS_TIDAK_LOLOS;
     StatusSuhu_t tStatus = SUHU_IDEAL;
+    uint8_t tdsSeverity = 0;
+    uint8_t turbiditySeverity = 0;
+    uint8_t temperatureSeverity = 0;
 
     if (activeParam == WaterParameter::PEMANDIAN_KOLAM) {
         // Mode Pemandian / Kolam: Evaluasi Threshold Langsung (Non-Fuzzy)
@@ -295,12 +298,20 @@ void sensors_processFuzzy() {
         skor = thResult.semuaAman ? 1.0f : 0.0f;
         qStatus = thResult.semuaAman ? STATUS_SANGAT_LAYAK : STATUS_TIDAK_LOLOS;
         tStatus = thResult.suhuAman ? SUHU_IDEAL : SUHU_EKSTREM;
+        turbiditySeverity = thResult.turbidityAman ? 0 : 2;
+        temperatureSeverity = thResult.suhuAman ? 0 : 2;
     } else {
         // Mode Air Minum & Higiene Sanitasi: Evaluasi Fuzzy Sugeno (3 input)
         dTemp = fabs(tempSnapshot - BASE_ROOM_TEMP);
         skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, dTemp);
         qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
         tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(dTemp, profil) : SUHU_IDEAL;
+        tdsSeverity = (tdsComp <= profil->tds0_c) ? 0 :
+                      ((tdsComp <= profil->tds1_c) ? 1 : 2);
+        turbiditySeverity = (turbSnapshot <= profil->turb0_c) ? 0 :
+                             ((turbSnapshot <= profil->turb1_c) ? 1 : 2);
+        temperatureSeverity = (dTemp <= profil->temp0_c) ? 0 :
+                              ((dTemp <= profil->temp1_c) ? 1 : 2);
     }
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
@@ -309,6 +320,9 @@ void sensors_processFuzzy() {
         g_sensorData.qualityStatus    = qStatus;
         g_sensorData.tempStatus       = tStatus;
         g_sensorData.thresholdResult  = thResult;
+        g_sensorData.tdsSeverity      = tdsSeverity;
+        g_sensorData.turbiditySeverity = turbiditySeverity;
+        g_sensorData.temperatureSeverity = temperatureSeverity;
 
         g_systemState.displayDirty  = true;
         xSemaphoreGive(g_dataMutex);

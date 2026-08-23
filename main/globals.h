@@ -91,6 +91,9 @@ struct SensorData {
     KualitasAir_t qualityStatus; // SANGAT_LAYAK, LAYAK_SARING_RINGAN, dll
     StatusSuhu_t tempStatus;     // IDEAL, MENYIMPANG, EKSTREM
     ThresholdResult_t thresholdResult; // Hasil evaluasi threshold (khusus Pemandian)
+    uint8_t tdsSeverity;         // 0=Ideal, 1=Batas, 2=Tinggi
+    uint8_t turbiditySeverity;   // 0=Jernih, 1=Sedang, 2=Keruh
+    uint8_t temperatureSeverity; // 0=Ideal, 1=Menyimpang, 2=Ekstrem
 
     SensorStatus temperatureStatus;
     SensorStatus tdsStatus;

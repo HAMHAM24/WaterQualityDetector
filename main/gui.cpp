@@ -258,7 +258,14 @@ static void drawWrappedText(uint8_t x, uint8_t y, const char* text) {
     }
 }
 
-/** @brief Dashboard Hasil Pengukuran & Detail Rekomendasi (Dual-Page View) */
+static const char* severityLabel(uint8_t severity, const char* ideal,
+                                 const char* batas, const char* buruk) {
+    if (severity == 0) return ideal;
+    if (severity == 1) return batas;
+    return buruk;
+}
+
+/** @brief Dashboard, diagnosis, dan saran spesifik (Three-Page View). */
 static void drawMeasurement() {
     if (s_viewState.activeParameter == WaterParameter::PEMANDIAN_KOLAM) {
         // =====================================================================
@@ -266,7 +273,7 @@ static void drawMeasurement() {
         // =====================================================================
         if (s_viewState.measurementSubPage == 0) {
             // --- HALAMAN 1: DASHBOARD PER-PARAMETER ---
-            display_drawHeader("Pemandian (1/2)");
+            display_drawHeader("Pemandian (1/3)");
             uint8_t y = MENU_FIRST_LINE_Y;
             g_u8g2.setFont(u8g2_font_6x10_tf);
 
@@ -319,30 +326,53 @@ static void drawMeasurement() {
 
             display_drawStatusBar("DN:Detail", "BACK:Menu");
 
-        } else {
-            // --- HALAMAN 2: DETAIL ACUAN & STATUS PER-PARAMETER ---
-            display_drawHeader("Pemandian (2/2)");
+        } else if (s_viewState.measurementSubPage == 1) {
+            // --- HALAMAN 2: DIAGNOSIS PARAMETER ---
+            display_drawHeader("Diagnosis (2/3)");
             uint8_t y = MENU_FIRST_LINE_Y;
             g_u8g2.setFont(u8g2_font_6x10_tf);
 
-            g_u8g2.drawStr(2, y, "Dasar: Permenkes 2/23");
+            g_u8g2.drawStr(2, y, "Batas Pemandian/Kolam");
             y += MENU_LINE_HEIGHT;
 
             char l1[32];
             const char* sTag = s_view.thresholdResult.suhuAman ? "[LAYAK]" : "[TDK]";
-            snprintf(l1, sizeof(l1), "Suhu : 16-35C %s", sTag);
+            snprintf(l1, sizeof(l1), "Suhu: 16-35C %s", sTag);
             g_u8g2.drawStr(2, y, l1);
             y += MENU_LINE_HEIGHT;
 
             char l2[32];
             const char* tbTag = s_view.thresholdResult.turbidityAman ? "[LAYAK]" : "[TDK]";
-            snprintf(l2, sizeof(l2), "Turb : <0.5NTU %s", tbTag);
+            snprintf(l2, sizeof(l2), "Turb: <0.5NTU %s", tbTag);
             g_u8g2.drawStr(2, y, l2);
             y += MENU_LINE_HEIGHT;
 
-            g_u8g2.drawStr(2, y, "TDS  : Bebas [BYPASS]");
+            g_u8g2.drawStr(2, y, "TDS : BYPASS");
 
-            display_drawStatusBar("UP:Kembali", "BACK:Menu");
+            display_drawStatusBar("DN:Saran", "BACK:Menu");
+        } else {
+            // --- HALAMAN 3: SARAN TINDAKAN ---
+            display_drawHeader("Saran (3/3)");
+            uint8_t y = MENU_FIRST_LINE_Y;
+            g_u8g2.setFont(u8g2_font_6x10_tf);
+
+            if (s_view.thresholdResult.semuaAman) {
+                g_u8g2.drawStr(2, y, "Air layak digunakan");
+                y += MENU_LINE_HEIGHT;
+                g_u8g2.drawStr(2, y, "Jaga air tetap jernih");
+            } else {
+                if (!s_view.thresholdResult.suhuAman) {
+                    g_u8g2.drawStr(2, y, "Suhu: atur suhu air");
+                    y += MENU_LINE_HEIGHT;
+                }
+                if (!s_view.thresholdResult.turbidityAman) {
+                    g_u8g2.drawStr(2, y, "Turb: jernihkan air");
+                    y += MENU_LINE_HEIGHT;
+                }
+                g_u8g2.drawStr(2, y, "Uji ulang air");
+            }
+
+            display_drawStatusBar("UP:Diagnosis", "BACK:Menu");
         }
         return;
     }
@@ -352,7 +382,7 @@ static void drawMeasurement() {
     // =========================================================================
     if (s_viewState.measurementSubPage == 0) {
         // --- HALAMAN 1: DATA SENSOR + SKOR FUZZY (DASHBOARD) ---
-        display_drawHeader("Air Minum (1/2)");
+        display_drawHeader("Air Minum (1/3)");
         uint8_t y = MENU_FIRST_LINE_Y;
 
         // Suhu + status suhu
@@ -392,36 +422,71 @@ static void drawMeasurement() {
 
         display_drawStatusBar("DN:Detail", "BACK:Menu");
 
-    } else {
-        // --- HALAMAN 2: DETAIL REKOMENDASI TINDAKAN ---
-        display_drawHeader("Rekomendasi (2/2)");
+    } else if (s_viewState.measurementSubPage == 1) {
+        // --- HALAMAN 2: DIAGNOSIS PARAMETER ---
+        display_drawHeader("Diagnosis (2/3)");
         uint8_t y = MENU_FIRST_LINE_Y;
         g_u8g2.setFont(u8g2_font_6x10_tf);
 
         char lineBuf[32];
-        snprintf(lineBuf, sizeof(lineBuf), "Mutu  : %s", FuzzyKualitasAir_GetStatusBadge(s_view.qualityStatus));
+        snprintf(lineBuf, sizeof(lineBuf), "Mutu: %s", FuzzyKualitasAir_GetStatusBadge(s_view.qualityStatus));
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
-        if (s_view.temperatureStatus == SensorStatus::OK) {
-            char tStr[8];
-            dtostrf(s_view.temperature, 4, 1, tStr);
-            char* p = tStr;
-            while (*p == ' ') p++;
-            snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %sC (%s)", p,
-                     FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus));
+        snprintf(lineBuf, sizeof(lineBuf), "Suhu: %s", severityLabel(
+                 s_view.temperatureSeverity, "Ideal", "Batas", "Ekstr"));
+        g_u8g2.drawStr(2, y, lineBuf);
+        y += MENU_LINE_HEIGHT;
+
+        snprintf(lineBuf, sizeof(lineBuf), "TDS : %s", severityLabel(
+                 s_view.tdsSeverity, "Ideal", "Batas", "Tinggi"));
+        g_u8g2.drawStr(2, y, lineBuf);
+        y += MENU_LINE_HEIGHT;
+
+        snprintf(lineBuf, sizeof(lineBuf), "Turb: %s", severityLabel(
+                 s_view.turbiditySeverity, "Jernih", "Sedang", "Keruh"));
+        g_u8g2.drawStr(2, y, lineBuf);
+
+        display_drawStatusBar("DN:Saran", "BACK:Menu");
+    } else {
+        // --- HALAMAN 3: SARAN TINDAKAN SPESIFIK ---
+        display_drawHeader("Saran (3/3)");
+        uint8_t y = MENU_FIRST_LINE_Y;
+        g_u8g2.setFont(u8g2_font_6x10_tf);
+
+        if (s_view.temperatureSeverity == 0 && s_view.tdsSeverity == 0 &&
+            s_view.turbiditySeverity == 0) {
+            g_u8g2.drawStr(2, y, "Air layak digunakan");
+            y += MENU_LINE_HEIGHT;
+            g_u8g2.drawStr(2, y, "Pantau berkala");
         } else {
-            snprintf(lineBuf, sizeof(lineBuf), "Suhu  : ERROR");
+            if (s_view.tdsSeverity == 1) {
+                g_u8g2.drawStr(2, y, "TDS : saring ringan");
+                y += MENU_LINE_HEIGHT;
+            } else if (s_view.tdsSeverity == 2) {
+                g_u8g2.drawStr(2, y, "TDS : RO/ganti air");
+                y += MENU_LINE_HEIGHT;
+            }
+            if (s_view.turbiditySeverity == 1) {
+                g_u8g2.drawStr(2, y, "Turb: endap+saring");
+                y += MENU_LINE_HEIGHT;
+            } else if (s_view.turbiditySeverity == 2) {
+                g_u8g2.drawStr(2, y, "Turb: filter total");
+                y += MENU_LINE_HEIGHT;
+            }
+            if (s_view.temperatureSeverity == 1) {
+                g_u8g2.drawStr(2, y, "Suhu: atur suhu");
+                y += MENU_LINE_HEIGHT;
+            } else if (s_view.temperatureSeverity == 2) {
+                g_u8g2.drawStr(2, y, "Suhu: jangan pakai");
+                y += MENU_LINE_HEIGHT;
+            }
+            if (y <= MENU_LAST_LINE_Y) {
+                g_u8g2.drawStr(2, y, "Uji ulang air");
+            }
         }
-        g_u8g2.drawStr(2, y, lineBuf);
-        y += MENU_LINE_HEIGHT;
 
-        g_u8g2.drawStr(2, y, "Saran :");
-        y += MENU_LINE_HEIGHT;
-        const char* pesan = FuzzyKualitasAir_GetPesan(s_view.qualityStatus);
-        drawWrappedText(4, y, pesan);
-
-        display_drawStatusBar("UP:Kembali", "BACK:Menu");
+        display_drawStatusBar("UP:Diagnosis", "BACK:Menu");
     }
 }
 
@@ -671,15 +736,15 @@ void gui_update(const ButtonEventMsg& msg) {
             break;
 
         case MenuState::MEASUREMENT:
-            // Navigasi intuitif: DOWN pindah ke Rekomendasi, UP kembali ke Dashboard
+            // Navigasi tiga halaman: Hasil -> Diagnosis -> Saran.
             if (isActivate && (msg.id == ButtonID::DOWN || msg.id == ButtonID::OK)) {
-                if (g_systemState.measurementSubPage == 0) {
-                    g_systemState.measurementSubPage = 1;
+                if (g_systemState.measurementSubPage < 2) {
+                    g_systemState.measurementSubPage++;
                     g_systemState.displayDirty = true;
                 }
             } else if (isActivate && (msg.id == ButtonID::UP)) {
-                if (g_systemState.measurementSubPage == 1) {
-                    g_systemState.measurementSubPage = 0;
+                if (g_systemState.measurementSubPage > 0) {
+                    g_systemState.measurementSubPage--;
                     g_systemState.displayDirty = true;
                 }
             } else if (isActivate && msg.id == ButtonID::BACK) {
