@@ -197,16 +197,20 @@ static void drawWaitingSampling() {
         g_u8g2.drawBox(barX + 2, barY + 2, fillW, barH - 4);
     }
 
-    // Persentase di bawah bar
+    // Status kestabilan di kiri dan persentase di kanan (font 5x7, y = 51)
     g_u8g2.setFont(u8g2_font_5x7_tf);
-    char pctBuf[8];
-    snprintf(pctBuf, sizeof(pctBuf), "%u%%", static_cast<unsigned>(progress * 100.0f));
-    g_u8g2.drawStr(centeredX(pctBuf), 51, pctBuf);
 
     char stability[24];
     snprintf(stability, sizeof(stability), "Stabil: %u/%u", s_viewState.stabilizationCount,
              TEMP_STABLE_REQUIRED_SAMPLES);
-    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + 3 * MENU_LINE_HEIGHT, stability);
+    g_u8g2.drawStr(12, 51, stability);
+
+    char pctBuf[8];
+    snprintf(pctBuf, sizeof(pctBuf), "%u%%", static_cast<unsigned>(progress * 100.0f));
+    uint8_t pctW = g_u8g2.getStrWidth(pctBuf);
+    uint8_t pctX = (DISPLAY_WIDTH > (pctW + 14)) ? (DISPLAY_WIDTH - pctW - 14) : 95;
+    g_u8g2.drawStr(pctX, 51, pctBuf);
+
     display_drawStatusBar("Tunggu stabil...", "BACK:Batal");
 }
 
@@ -447,22 +451,22 @@ static void drawMeasurement() {
             if (s_view.tdsSeverity == 1) {
                 g_u8g2.drawStr(2, y, "TDS : saring ringan");
                 y += MENU_LINE_HEIGHT;
-            } else if (s_view.tdsSeverity == 2) {
+            } else if (s_view.tdsSeverity >= 2) {
                 g_u8g2.drawStr(2, y, "TDS : RO/ganti air");
                 y += MENU_LINE_HEIGHT;
             }
             if (s_view.turbiditySeverity == 1) {
                 g_u8g2.drawStr(2, y, "Turb: endap+saring");
                 y += MENU_LINE_HEIGHT;
-            } else if (s_view.turbiditySeverity == 2) {
+            } else if (s_view.turbiditySeverity >= 2) {
                 g_u8g2.drawStr(2, y, "Turb: filter total");
                 y += MENU_LINE_HEIGHT;
             }
             if (s_view.temperatureSeverity == 1) {
-                g_u8g2.drawStr(2, y, "Suhu: hangatkan air");
+                g_u8g2.drawStr(2, y, "Suhu: sesuaikan suhu");
                 y += MENU_LINE_HEIGHT;
-            } else if (s_view.temperatureSeverity == 2) {
-                g_u8g2.drawStr(2, y, "Suhu: dinginkan air");
+            } else if (s_view.temperatureSeverity >= 2) {
+                g_u8g2.drawStr(2, y, "Suhu: deviasi tinggi");
                 y += MENU_LINE_HEIGHT;
             }
             if (y <= MENU_LAST_LINE_Y) {

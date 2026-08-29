@@ -1,175 +1,334 @@
-   # Water Quality Analyzer
+# Water Quality Analyzer & Physic Quality Index (FBN)
+### Firmware Alat Uji Mutu Fisik Air Berbasis STM32F401CCU6 (BlackPill) & STM32FreeRTOS
 
-Creator: I
-
-Firmware berbasis Arduino/STM32 untuk alat analisis kualitas air terpadu dengan tampilan OLED 128x64, sensor suhu DS18B20, sensor TDS analog, sensor turbidity analog, serta **Sistem Klasifikasi Kualitas Air berbasis Fuzzy Logic Sugeno Order-0** dan **Penyimpanan Kalibrasi EEPROM Flash STM32**. Proyek ini dibuat dengan arsitektur *multitask preemptive* berbasis **STM32FreeRTOS** dan berjalan pada board **STM32F401CCU6 (Blackpill)**.
-
----
-
-## 1. Deskripsi Proyek
-
-Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-parameter yang menampilkan hasil pengukuran dan evaluasi kualitas air secara *real-time* pada layar OLED 128x64. Sistem membaca data dari beberapa sensor secara periodik, melakukan kompensasi suhu terhadap pembacaan TDS, mengolah data melalui **Mesin Evaluasi Fuzzy Sugeno**, menyimpannya secara *thread-safe* di dalam struktur data global, dan menampilkannya melalui antarmuka GUI **Three-Page View**.
-
-### Tujuan Utama Firmware:
-- Membaca suhu air menggunakan sensor digital **DS18B20** (OneWire).
-- Membaca nilai **TDS analog** dan menerapkan **kompensasi suhu** (referensi 25 °C).
-- Membaca nilai **turbidity analog** (kekeruhan air) dengan filter *Circular Moving Average* (20 sampel).
-- Menghitung **Skor Kualitas Air (0–100)** dan menetapkan label status (`LAYAK`, `LTM`, `TL`) serta pesan rekomendasi menggunakan **Fuzzy Logic Sugeno Order-0**.
-- Menampilkan hasil secara *real-time* di OLED 128x64 dengan fitur **Three-Page View** pada layar Pengukuran.
-- Menyediakan **Fitur Kalibrasi Sensor Interaktif** (TDS, Turbidity, Suhu) dengan penyimpanan permanen pada memori Flash EEPROM STM32.
-- Menyediakan navigasi menu yang intuitif dan aman menggunakan 6 tombol fisik.
-- Mendukung pengaturan kecerahan/kontras layar.
+Firmware embedded canggih untuk alat analisis mutu fisik air terpadu dengan tampilan **OLED 1.3" SH1106 / SSD1306 (128x64 piksel)**, sensor suhu digital **DS18B20**, sensor **TDS analog**, sensor **turbidity analog (SEN0189)**, **Sistem Inferensi Fuzzy Sugeno Orde-0 (3 Input, 64 Aturan, Worst-Parameter Wins)** berdasar standar **Permenkes RI No. 2 Tahun 2023**, serta **Penyimpanan Parameter Kalibrasi & Display pada EEPROM Flash Emulation STM32**.
 
 ---
 
-## 2. Spesifikasi Hardware & Software
+## 1. Deskripsi Proyek & Fitur Utama
+
+Proyek ini dirancang sebagai instrumen uji kualitas fisik air lapangan portabel yang bekerja secara mandiri (*standalone*), cepat, dan andal dengan fitur-fitur utama:
+
+- **Pengukuran Suhu Digital Presisi (DS18B20)**: Membaca suhu air secara non-blocking melalui bus OneWire (`PB_10`).
+- **Kompensasi Termal TDS Pasca-Polinomial**: Mengoreksi efek fluktuasi suhu terhadap konduktivitas ion menggunakan formula standar $2\%\text{ per }^\circ\text{C}$ pada suhu referensi $25.0^\circ\text{C}$.
+- **Filter Circular Moving Average (20 Sampel)**: Menghaluskan pembacaan ADC TDS dan Turbidity dari noise listrik frekuensi tinggi.
+- **Workflow-Driven GUI dengan Input Suhu Udara Manual**: Mengizinkan pengguna memasukkan suhu lingkungan ($T_{\text{udara}}$) secara manual untuk menghitung deviasi suhu air ($\Delta T = |T_{\text{air}} - T_{\text{udara}}|$) tanpa menunggu inersia termal probe *stainless steel*.
+- **Deteksi Stabilisasi Suhu Air Otomatis**: Memastikan kestabilan probe sensor ($3\times$ pembacaan beruntun variasi $\le 0.2^\circ\text{C}$, timeout $60\text{ s}$) sebelum mengunci data.
+- **Mesin Evaluasi Fuzzy Sugeno Orde-0 (64 Rule)**: Menghitung skor mutu air ($0.00 - 1.00$) menggunakan logika keparahan dominan (*Worst Parameter Wins*) dan 4 tingkat status mutu (`S.LAYAK`, `P.SED`, `P.INT`, `T.LOLOS`).
+- **Compliance Hard Gate (Pengunci Regulasi Permenkes)**: Mengunci status ke `T.LOLOS` ($Z=0.00$) secara mutlak jika $\text{TDS} \ge 300\text{ mg/L}$, $\text{Turbidity} \ge 3.0\text{ NTU}$, atau $\Delta T > 3.0^\circ\text{C}$.
+- **Mode Pemandian / Kolam (Non-Fuzzy Threshold Checker)**: Pengecekan ambang batas langsung untuk air rekreasi ($16.0–35.0^\circ\text{C}$, $<0.5\text{ NTU}$, TDS bypass).
+- **Antarmuka Three-Page View**:
+  - `Halaman 1/3`: Dashboard hasil pengukuran live & skor mutu.
+  - `Halaman 2/3`: Diagnosis parameter penyebab (menunjukkan status mutu per-sensor).
+  - `Halaman 3/3`: Saran tindakan spesifik dan terarah tanpa teks terpotong.
+- **Kalibrasi Interaktif & Permanen di Flash EEPROM**:
+  - TDS 1-Titik dengan ketelitian step $\pm 1\text{ ppm}$.
+  - Turbidity Wizard 2-Titik (Titik 1: Air Aquades 0 NTU, Titik 2: Larutan Standar Custom $1–3000\text{ NTU}$ step $\pm 5\text{ NTU}$).
+  - Suhu Offset DS18B20 step $\pm 0.1^\circ\text{C}$.
+  - Kecerahan (*Brightness*) & Kontras OLED otomatis tersimpan di Flash.
+  - Halaman pengaman **Konfirmasi Reset Pabrik** (*Anti-Accidental Reset*).
+- **Navigasi 6 Tombol Ergonomis**: `UP`, `DOWN`, `LEFT`, `RIGHT`, `OK`, `BACK`.
+
+---
+
+## 2. Spesifikasi Perangkat Keras & Lunak
 
 ### Board Utama
-- **MCU**: STM32F401CCU6 (Blackpill ARM Cortex-M4, 84 MHz, 64 KB SRAM, 256 KB Flash)
-- **Framework**: STM32duino (Arduino Core STM32)
-- **RTOS**: STM32FreeRTOS
+- **MCU**: STM32F401CCU6 (BlackPill ARM Cortex-M4, 84 MHz, 64 KB SRAM, 256 KB Flash)
+- **Framework**: STM32duino (Arduino Core STM32 resmi STMicroelectronics)
+- **RTOS**: STM32FreeRTOS (Kernel FreeRTOS V10.x Preemptive)
 
 ### Sensor yang Didukung
-- **Suhu**: DS18B20 Digital Waterproof (OneWire Bus pada `PB_10`, resolusi 12-bit)
-- **TDS**: Sensor TDS Analog DFRobot (ADC CH0 pada `PA_0`, 12-bit)
-- **Turbidity**: Sensor Turbidity Analog SEN0189 (ADC CH1 pada `PA_1`, 12-bit)
+- **Suhu Air**: DS18B20 Digital Waterproof Probe (OneWire Bus pada `PB_10`, resolusi 12-bit)
+- **TDS**: DFRobot Analog TDS Meter / SEN0244 (ADC Channel 0 pada `PA_0`, 12-bit $0–4095$)
+- **Turbidity**: DFRobot SEN0189 Analog Turbidity Sensor (ADC Channel 1 pada `PA_1`, 12-bit $0–4095$, disuplai 3.3V)
 
-### Display & Input
-- **Display**: OLED SSD1306 128x64 dengan komunikasi Hardware I2C (`PB_8` SCL, `PB_9` SDA)
-- **Input**: 6 Tombol Navigasi (`UP`, `DOWN`, `LEFT`, `RIGHT`, `OK`, `BACK`)
+### Display & Antarmuka
+- **Display**: OLED 1.3" SH1106 / SSD1306 128x64 I2C Hardware (`PB_8` SCL, `PB_9` SDA, clock 400 kHz)
+- **Input Tombol**: 6 Push Button dengan internal pull-up aktif LOW (`PB_14`, `PA_8`, `PB_0`, `PB_13`, `PB_12`, `PB_11`)
+- **Komunikasi Data / Telemetri**: USART1 Serial (`PA_9` TX, `PA_10` RX) baud rate 115200
 
 ---
 
-## 3. Diagram Ringkas Sistem
+## 3. Diagram Blok Sistem
 
 ```text
-[STM32F401CCU6 (Blackpill)]
-   |-- EEPROM Flash Memory -> Penyimpanan Permanen Parameter Kalibrasi
-   |-- UART Serial (PA_9 TX / PA_10 RX) -> Telemetri & Log Validasi (115200 baud)
-   |-- I2C (PB_8 SCL / PB_9 SDA) -> OLED SSD1306 128x64
-   |-- OneWire (PB_10) -> DS18B20 Temp Sensor
-   |-- ADC CH0 (PA_0) -> TDS Analog Sensor
-   |-- ADC CH1 (PA_1) -> Turbidity Analog Sensor
-   |-- GPIO Input -> 6 Tombol Navigasi (Active LOW, Internal Pull-Up)
+                                [ STM32F401CCU6 (BlackPill) ]
+                                              │
+    ┌──────────────────┬──────────────────────┼──────────────────────┬──────────────────┐
+    ▼                  ▼                      ▼                      ▼                  ▼
+[OneWire PB_10]   [ADC0 PA_0]            [ADC1 PA_1]            [I2C PB_8/PB_9]   [USART1 PA_9/10]
+DS18B20 Suhu      TDS Analog          Turbidity SEN0189       OLED 1.3" SH1106    Serial Telemetri
+Digital Sensor    (0-3.3V ADC)           (0-3.3V ADC)         (128x64 400 kHz)      (115200 baud)
+                                              │
+                         ┌────────────────────┴────────────────────┐
+                         ▼                                         ▼
+                 [6 Tombol Navigasi]                    [Emulasi Flash EEPROM]
+             UP/DOWN/LEFT/RIGHT/OK/BACK                 TDS K, Vclear, Vstd,
+             (Internal Pull-Up Active LOW)              Offset, Brightness/Contrast
 ```
 
 ---
 
 ## 4. Struktur File Proyek
 
-- `main.ino` – Entry point firmware, inisialisasi hardware/software, pengujian otomatis validasi baseline MATLAB, dan inisiasi FreeRTOS scheduler.
-- `config.h` – Single source of truth untuk konfigurasi pin, timing task, prioritas, stack size, konstanta konversi sensor (polinomial TDS, slope NTU, divider input), dan tabel profil baku mutu per peruntukan air.
-- `globals.h` / `globals.cpp` – Variabel state global, mutex data (`g_dataMutex`), queue tombol (`g_buttonEventQueue`), dan struct `SensorData` & `SystemState`.
-- `storage.h` / `storage.cpp` – Modul penyimpanan non-volatile Flash **EEPROM Emulation** untuk parameter kalibrasi ($K$-factor TDS, $V_{\text{clear}}$ Turbidity, Offset Suhu).
-- `fuzzy_kualitas_air.h` / `fuzzy_kualitas_air.c` – Engine evaluasi **Fuzzy Logic Sugeno Order-0**, kompensasi suhu TDS, 9 rule base, dan klasifikasi status kualitas air.
-- `buttons.h` / `buttons.cpp` – Driver tombol dengan software debounce (30ms), hold (600ms), repeat (150ms), dan event queue.
-- `sensors.h` / `sensors.cpp` – Driver sensor DS18B20 non-blocking, pembacaan ADC, filter moving average, penerapan kalibrasi, dan pemrosesan fuzzy thread-safe.
-- `display.h` / `display.cpp` – Driver OLED SSD1306 U8g2 full frame buffer dan primitif header/status bar.
-- `gui.h` / `gui.cpp` – Antarmuka GUI berbasis Finite State Machine (FSM) dengan fitur **Three-Page View** pada layar Pengukuran dan menu kalibrasi interaktif.
-- `tasks.h` / `tasks.cpp` – Pembuatan dan penanganan 6 task FreeRTOS.
-- `kualitas_air.fis` – File ekspor konfigurasi Fuzzy Inference System dari MATLAB.
+- `main.ino` – Entry point firmware, inisialisasi hardware, self-test validasi baseline startup, dan start scheduler FreeRTOS.
+- `config.h` – Single source of truth untuk pin mapping, konstanta konversi sensor, konstanta timing/stack task, dan batas baku mutu.
+- `globals.h` / `globals.cpp` – Variabel state global, handle mutex `g_dataMutex`, queue tombol `g_buttonEventQueue`, dan struct `SensorData` / `SystemState`.
+- `storage.h` / `storage.cpp` – Modul penyimpanan non-volatile Flash EEPROM Emulation (buffered write 1-cycle erase).
+- `fuzzy_kualitas_air.h` / `fuzzy_kualitas_air.c` – Mesin inferensi Fuzzy Sugeno 64 aturan (*worst-parameter wins*), fungsi membership trapesium/segitiga, dan evaluasi threshold Pemandian.
+- `buttons.h` / `buttons.cpp` – Driver 6 tombol navigasi dengan software debounce (30 ms), hold (600 ms), repeat (150 ms), dan event queue.
+- `sensors.h` / `sensors.cpp` – Driver sensor non-blocking (DS18B20, ADC TDS & Turbidity, filter circular moving average, kompensasi suhu TDS).
+- `display.h` / `display.cpp` – Driver OLED SH1106 / SSD1306 berbasis U8g2 full frame buffer dan primitif header/status bar.
+- `gui.h` / `gui.cpp` – Finite State Machine (FSM) GUI, guided workflow, input suhu udara manual, stabilisasi suhu, three-page view, dan kalibrasi interaktif.
+- `tasks.h` / `tasks.cpp` – Orkestrasi 6 task multitasking FreeRTOS preemptive.
+- `kualitas_air.fis` – File ekspor model Fuzzy Inference System Sugeno 64 rule untuk MATLAB.
+- `Note/Laporan_Lengkap_Fuzzy_Sugeno_dan_Implementasi.md` – Laporan lengkap metodologi dan dasar teori untuk naskah Skripsi/TA.
 
 ---
 
 ## 5. Konfigurasi Pin Mapping
 
-| Fungsi | Pin MCU | Catatan Hardware |
+| Nama Port / Pin | Fungsi Hardware | Catatan Rangkaian |
 |---|---|---|
-| **UART TX** | `PA_9` | MCU TX -> FTDI RX |
-| **UART RX** | `PA_10` | MCU RX <- FTDI TX |
-| **OLED SCL** | `PB_8` | Hardware I2C SCL |
-| **OLED SDA** | `PB_9` | Hardware I2C SDA |
-| **DS18B20 Data** | `PB_10` | OneWire Data (Pull-up 4.7kΩ) |
-| **TDS Analog** | `PA_0` | ADC Channel 0 (12-bit) |
-| **Turbidity Analog** | `PA_1` | ADC Channel 1 (12-bit) |
-| **BTN UP** | `PB_14` | Active LOW (`INPUT_PULLUP`) |
-| **BTN DOWN** | `PA_8` | Active LOW (`INPUT_PULLUP`) |
-| **BTN LEFT** | `PB_0` | Active LOW (`INPUT_PULLUP`) |
-| **BTN RIGHT** | `PB_13` | Active LOW (`INPUT_PULLUP`) |
-| **BTN OK** | `PB_12` | Active LOW (`INPUT_PULLUP`) |
-| **BTN BACK** | `PB_11` | Active LOW (`INPUT_PULLUP`) |
+| `PA_9` | **UART TX** | STM32 TX $\rightarrow$ FTDI / Serial Monitor RX |
+| `PA_10` | **UART RX** | STM32 RX $\leftarrow$ FTDI / Serial Monitor TX |
+| `PB_8` | **OLED SCL** | Hardware I2C1 SCL (Pull-up internal/modul) |
+| `PB_9` | **OLED SDA** | Hardware I2C1 SDA (Pull-up internal/modul) |
+| `PB_10` | **DS18B20 Data** | OneWire Data Bus (Pull-up eksternal $4.7\text{ k}\Omega$ ke 3.3V) |
+| `PA_0` | **TDS Analog** | ADC1 Channel 0 ($0–3.3\text{ V}$, resolusi 12-bit) |
+| `PA_1` | **Turbidity Analog** | ADC1 Channel 1 ($0–3.3\text{ V}$, resolusi 12-bit) |
+| `PB_14` | **Tombol UP** | Active LOW (`INPUT_PULLUP`, ke GND saat ditekan) |
+| `PA_8` | **Tombol DOWN** | Active LOW (`INPUT_PULLUP`, ke GND saat ditekan) |
+| `PB_0` | **Tombol LEFT** | Active LOW (`INPUT_PULLUP`, ke GND saat ditekan) |
+| `PB_13` | **Tombol RIGHT** | Active LOW (`INPUT_PULLUP`, ke GND saat ditekan) |
+| `PB_12` | **Tombol OK** | Active LOW (`INPUT_PULLUP`, ke GND saat ditekan) |
+| `PB_11` | **Tombol BACK** | Active LOW (`INPUT_PULLUP`, ke GND saat ditekan) |
+| `PB_15` | **Cadangan** | Bebas / Tidak terpakai (*Reserved*) |
 
 ---
 
-## 6. Library yang Diperlukan
+## 6. Library Arduino yang Diperlukan
 
 Pasang library berikut melalui **Arduino Library Manager**:
-
-- `STM32duino FreeRTOS`
-- `U8g2`
-- `OneWire`
-- `DallasTemperature`
+1. **`STM32duino FreeRTOS`** (oleh STMicroelectronics)
+2. **`U8g2`** (oleh olikraus)
+3. **`OneWire`** (oleh Paul Stoffregen)
+4. **`DallasTemperature`** (oleh Miles Burton)
 
 ---
 
 ## 7. Arsitektur Multitasking FreeRTOS
 
-Firmware menggunakan arsitektur *preemptive multitasking* dengan 6 task independen:
+Firmware beroperasi menggunakan arsitektur *preemptive multitasking* dengan 6 task independen yang saling berkomunikasi secara aman melalui mutex dan queue:
 
-1. **TaskButton** (Periode: 15 ms | Prioritas: 4 | Stack: 160w): Scan GPIO tombol, debounce, dan melempar event ke `g_buttonEventQueue`.
-2. **TaskGui** (Periode: 50 ms | Prioritas: 3 | Stack: 320w): Mengonsumsi event tombol dan meng-update FSM state GUI. **Tidak melakukan penulisan flash** — hanya menjadwalkan penyimpanan kalibrasi via `storage_requestSave()`.
-3. **TaskOled** (Periode: 100 ms | Prioritas: 2 | Stack: 512w): Menggambar ulang layar OLED via U8g2 hanya saat `displayDirty == true`. Seluruh format float memakai `dtostrf()`.
-4. **TaskWater** (Periode: 200 ms | Prioritas: 2 | Stack: 256w): Sampling ADC, konversi rantai lengkap ke satuan fisik (ADC→Volt→ppm TDS, Volt→NTU), filter moving average, eksekusi penulisan flash yang tertunda (`storage_processPendingSave()`), dan evaluasi Fuzzy Logic Engine.
-5. **TaskTemp** (Periode: 1000 ms | Prioritas: 1 | Stack: 192w): Konversi DS18B20 non-blocking (menunggu 750ms secara kooperatif).
-6. **TaskDebug** (Periode: 1000 ms | Prioritas: 1 | Stack: 352w): Mengirim log telemetri sistem, pembacaan sensor, dan **stack high water mark** seluruh task ke UART `Serial` (115200 baud).
-
-**Catatan keamanan penulisan Flash:** STM32F401CCU6 TIDAK memiliki EEPROM sejati.
-Penulisan kalibrasi menggunakan API buffer EEPROM emulation agar satu siklus
-hapus-sektor cukup satu kali untuk seluruh struct, bukan per byte. Operasi
-ini dijalankan dari **TaskWater** (bukan TaskGui) dengan
-`vTaskSuspendAll()` agar scheduler tidak memproses task lain saat bus flash
-terhenti.
+| Nama Task | Periode | Prioritas | Ukuran Stack | Tanggung Jawab Utama |
+|---|:---:|:---:|:---:|---|
+| **TaskButton** | $15\text{ ms}$ | `4` (Tinggi) | 160 word | Scan GPIO tombol, debounce, deteksi hold/repeat, kirim event ke queue |
+| **TaskGui** | $50\text{ ms}$ | `3` | 320 word | Konsumsi event tombol, proses state transition FSM, jadwal simpan EEPROM |
+| **TaskOled** | $100\text{ ms}$ | `2` | 512 word | Ambil snapshot data di bawah mutex, render tampilan OLED via U8g2 bila dirty |
+| **TaskWater** | $200\text{ ms}$ | `2` | 256 word | Sampling ADC TDS & Turbidity, moving average, eksekusi flash write tertunda, inferensi fuzzy |
+| **TaskTemp** | $1000\text{ ms}$ | `1` | 192 word | Konversi DS18B20 non-blocking (tunggu 750 ms kooperatif via vTaskDelay) |
+| **TaskDebug** | $1000\text{ ms}$ | `1` (Rendah) | 352 word | Kirim log telemetri sensor dan laporan stack high water mark ke Serial |
 
 ---
 
-## 8. Mode Evaluasi Kualitas Air
+## 8. Metodologi Fuzzy Sugeno & Mode Evaluasi Kualitas Air
 
-Firmware memiliki 2 mode evaluasi utama yang disesuaikan dengan regulasi Permenkes RI No. 2 Tahun 2023:
+### 8.1. Mode 1: Air Minum & Higiene Sanitasi (Fuzzy Sugeno 64 Rule)
+Sistem inferensi menggunakan **Fuzzy Sugeno Orde-0** dengan 3 variabel input yang masing-masing dibagi ke dalam **4 himpunan keanggotaan**:
 
-### Mode 1: Air Minum & Higiene Sanitasi (Fuzzy Logic Sugeno Orde-0)
-Menggunakan **Fuzzy Inference System (FIS) Sugeno Orde-0** dengan **3 input, 64 aturan**, kurva trapesium (`trapmf`) dan segitiga (`trimf`):
-1. **TDS terkompensasi (ppm / mg/L)**: SL `[0,0,150,225]`, PS `[150,225,300]`, PI `[225,300,450]`, TL `[300,450,600,600]`.
-2. **Turbidity (NTU)**: SL `[0,0,1.5,2.25]`, PS `[1.5,2.25,3]`, PI `[2.25,3,4.5]`, TL `[3,4.5,25,25]`.
-3. **Deviasi suhu (Celsius)**: $\Delta T=|T_{air}-T_{udara}|$, dengan SL `[0,0,1,1.5]`, PS `[1,1.75,2.5]`, PI `[2,2.75,3.5]`, TL `[3,4,10,10]`.
+#### Parameter Membership Functions (Fuzzifikasi):
+1. **TDS Terkompensasi ($0 - 600\text{ mg/L}$)**:
+   - `SL` : `trapmf [0, 0, 150, 225]`
+   - `PS` : `trimf  [150, 225, 300]`
+   - `PI` : `trimf  [225, 300, 450]`
+   - `TL` : `trapmf [300, 450, 600, 600]`
 
-- **Output Skor (0.00 – 1.00)**: `S.LAYAK` (>=0.83), `P.SED` (>=0.50), `P.INT` (>=0.17), atau `T.LOLOS` (<0.17).
-- Batas kepatuhan tegas: TDS >=300 ppm, Turbidity >=3 NTU, atau Delta T >3 C menghasilkan `T.LOLOS`.
+$$\mu_{\text{TDS, SL}}(x) = \begin{cases} 1, & x \le 150 \\ \frac{225 - x}{225 - 150}, & 150 < x < 225 \\ 0, & x \ge 225 \end{cases} \quad
+\mu_{\text{TDS, PS}}(x) = \begin{cases} 0, & x \le 150 \text{ atau } x \ge 300 \\ \frac{x - 150}{225 - 150}, & 150 < x \le 225 \\ \frac{300 - x}{300 - 225}, & 225 < x < 300 \end{cases}$$
+
+$$\mu_{\text{TDS, PI}}(x) = \begin{cases} 0, & x \le 225 \text{ atau } x \ge 450 \\ \frac{x - 225}{300 - 225}, & 225 < x \le 300 \\ \frac{450 - x}{450 - 300}, & 300 < x < 450 \end{cases} \quad
+\mu_{\text{TDS, TL}}(x) = \begin{cases} 0, & x \le 300 \\ \frac{x - 300}{450 - 300}, & 300 < x < 450 \\ 1, & x \ge 450 \end{cases}$$
+
+2. **Kekeruhan / Turbidity ($0 - 25\text{ NTU}$)**:
+   - `SL` : `trapmf [0, 0, 1.5, 2.25]`
+   - `PS` : `trimf  [1.5, 2.25, 3.0]`
+   - `PI` : `trimf  [2.25, 3.0, 4.5]`
+   - `TL` : `trapmf [3.0, 4.5, 25.0, 25.0]`
+
+$$\mu_{\text{Turb, SL}}(x) = \begin{cases} 1, & x \le 1.5 \\ \frac{2.25 - x}{2.25 - 1.5}, & 1.5 < x < 2.25 \\ 0, & x \ge 2.25 \end{cases} \quad
+\mu_{\text{Turb, PS}}(x) = \begin{cases} 0, & x \le 1.5 \text{ atau } x \ge 3.0 \\ \frac{x - 1.5}{2.25 - 1.5}, & 1.5 < x \le 2.25 \\ \frac{3.0 - x}{3.0 - 2.25}, & 2.25 < x < 3.0 \end{cases}$$
+
+$$\mu_{\text{Turb, PI}}(x) = \begin{cases} 0, & x \le 2.25 \text{ atau } x \ge 4.5 \\ \frac{x - 2.25}{3.0 - 2.25}, & 2.25 < x \le 3.0 \\ \frac{4.5 - x}{4.5 - 3.0}, & 3.0 < x < 4.5 \end{cases} \quad
+\mu_{\text{Turb, TL}}(x) = \begin{cases} 0, & x \le 3.0 \\ \frac{x - 3.0}{4.5 - 3.0}, & 3.0 < x < 4.5 \\ 1, & x \ge 4.5 \end{cases}$$
+
+3. **Deviasi Suhu $\Delta T = |T_{\text{air}} - T_{\text{udara}}| \ (0 - 10^\circ\text{C}$)**:
+   - `SL` : `trapmf [0, 0, 1.0, 1.5]`
+   - `PS` : `trimf  [1.0, 1.75, 2.5]`
+   - `PI` : `trimf  [2.0, 2.75, 3.5]`
+   - `TL` : `trapmf [3.0, 4.0, 10.0, 10.0]`
+
+$$\mu_{\Delta T\text{, SL}}(x) = \begin{cases} 1, & x \le 1.0 \\ \frac{1.5 - x}{1.5 - 1.0}, & 1.0 < x < 1.5 \\ 0, & x \ge 1.5 \end{cases} \quad
+\mu_{\Delta T\text{, PS}}(x) = \begin{cases} 0, & x \le 1.0 \text{ atau } x \ge 2.5 \\ \frac{x - 1.0}{1.75 - 1.0}, & 1.0 < x \le 1.75 \\ \frac{2.5 - x}{2.5 - 1.75}, & 1.75 < x < 2.5 \end{cases}$$
+
+$$\mu_{\Delta T\text{, PI}}(x) = \begin{cases} 0, & x \le 2.0 \text{ atau } x \ge 3.5 \\ \frac{x - 2.0}{2.75 - 2.0}, & 2.0 < x \le 2.75 \\ \frac{3.5 - x}{3.5 - 2.75}, & 2.75 < x < 3.5 \end{cases} \quad
+\mu_{\Delta T\text{, TL}}(x) = \begin{cases} 0, & x \le 3.0 \\ \frac{x - 3.0}{4.0 - 3.0}, & 3.0 < x < 4.0 \\ 1, & x \ge 4.0 \end{cases}$$
 
 ---
 
-### Mode 2: Pemandian / Kolam (Non-Fuzzy Threshold Checker)
-Berdasarkan Permenkes No. 2/2023 Tabel 10 (Pemandian Umum) dan Tabel Kolam Renang, evaluasi dilakukan secara **langsung tanpa fuzzy (crisp threshold)** dengan standar gabungan konservatif:
-- **Suhu**: `16.0 – 35.0 °C` $\rightarrow$ `[LAYAK]`, di luar itu $\rightarrow$ `[TDK]`
-- **Turbidity**: `< 0.5 NTU` $\rightarrow$ `[LAYAK]`, di atas itu $\rightarrow$ `[TDK]`
+#### C. Logika Rule Base "Worst Parameter Wins" (MAX Severity) & Singleton $z$
+
+Prinsip dasar pengawasan kualitas air konsumsi adalah **kepatuhan gabungan (conjunctive compliance)**: parameter terburuk menentukan status akhir air.
+
+$$\text{Severity Output} = \max(\text{Severity}_{\text{Suhu}}, \text{Severity}_{\text{TDS}}, \text{Severity}_{\text{Turbidity}})$$
+$$z = 1.0 - \frac{\text{Severity}}{3}$$
+
+- **Severity 0 (SL)** $\rightarrow z_1 = 1.00$ (*Sangat Layak*)
+- **Severity 1 (PS)** $\rightarrow z_2 = 0.67$ (*Perlu Proses Sedang*)
+- **Severity 2 (PI)** $\rightarrow z_3 = 0.33$ (*Perlu Proses Intensif*)
+- **Severity 3 (TL)** $\rightarrow z_4 = 0.00$ (*Tidak Lolos*)
+
+---
+
+#### D. Tabel Lengkap 64 Aturan Inferensi Fuzzy Sugeno
+
+Kombinasi $4 \times 4 \times 4 = 64$ aturan inferensi yang diterapkan pada `kualitas_air.fis` dan `fuzzy_kualitas_air.c`:
+
+| No | Suhu ($\Delta T$) | TDS | Turbidity | Output Kualitas Air | Singleton $z$ |
+|:---:|:---:|:---:|:---:|:---|:---:|
+| **R1** | SL | SL | SL | Sangat Layak | $1.00$ |
+| **R2** | SL | SL | PS | Perlu Proses Sedang | $0.67$ |
+| **R3** | SL | SL | PI | Perlu Proses Intensif | $0.33$ |
+| **R4** | SL | SL | TL | Tidak Lolos | $0.00$ |
+| **R5** | SL | PS | SL | Perlu Proses Sedang | $0.67$ |
+| **R6** | SL | PS | PS | Perlu Proses Sedang | $0.67$ |
+| **R7** | SL | PS | PI | Perlu Proses Intensif | $0.33$ |
+| **R8** | SL | PS | TL | Tidak Lolos | $0.00$ |
+| **R9** | SL | PI | SL | Perlu Proses Intensif | $0.33$ |
+| **R10** | SL | PI | PS | Perlu Proses Intensif | $0.33$ |
+| **R11** | SL | PI | PI | Perlu Proses Intensif | $0.33$ |
+| **R12** | SL | PI | TL | Tidak Lolos | $0.00$ |
+| **R13** | SL | TL | SL | Tidak Lolos | $0.00$ |
+| **R14** | SL | TL | PS | Tidak Lolos | $0.00$ |
+| **R15** | SL | TL | PI | Tidak Lolos | $0.00$ |
+| **R16** | SL | TL | TL | Tidak Lolos | $0.00$ |
+| **R17** | PS | SL | SL | Perlu Proses Sedang | $0.67$ |
+| **R18** | PS | SL | PS | Perlu Proses Sedang | $0.67$ |
+| **R19** | PS | SL | PI | Perlu Proses Intensif | $0.33$ |
+| **R20** | PS | SL | TL | Tidak Lolos | $0.00$ |
+| **R21** | PS | PS | SL | Perlu Proses Sedang | $0.67$ |
+| **R22** | PS | PS | PS | Perlu Proses Sedang | $0.67$ |
+| **R23** | PS | PS | PI | Perlu Proses Intensif | $0.33$ |
+| **R24** | PS | PS | TL | Tidak Lolos | $0.00$ |
+| **R25** | PS | PI | SL | Perlu Proses Intensif | $0.33$ |
+| **R26** | PS | PI | PS | Perlu Proses Intensif | $0.33$ |
+| **R27** | PS | PI | PI | Perlu Proses Intensif | $0.33$ |
+| **R28** | PS | PI | TL | Tidak Lolos | $0.00$ |
+| **R29** | PS | TL | SL | Tidak Lolos | $0.00$ |
+| **R30** | PS | TL | PS | Tidak Lolos | $0.00$ |
+| **R31** | PS | TL | PI | Tidak Lolos | $0.00$ |
+| **R32** | PS | TL | TL | Tidak Lolos | $0.00$ |
+| **R33** | PI | SL | SL | Perlu Proses Intensif | $0.33$ |
+| **R34** | PI | SL | PS | Perlu Proses Intensif | $0.33$ |
+| **R35** | PI | SL | PI | Perlu Proses Intensif | $0.33$ |
+| **R36** | PI | SL | TL | Tidak Lolos | $0.00$ |
+| **R37** | PI | PS | SL | Perlu Proses Intensif | $0.33$ |
+| **R38** | PI | PS | PS | Perlu Proses Intensif | $0.33$ |
+| **R39** | PI | PS | PI | Perlu Proses Intensif | $0.33$ |
+| **R40** | PI | PS | TL | Tidak Lolos | $0.00$ |
+| **R41** | PI | PI | SL | Perlu Proses Intensif | $0.33$ |
+| **R42** | PI | PI | PS | Perlu Proses Intensif | $0.33$ |
+| **R43** | PI | PI | PI | Perlu Proses Intensif | $0.33$ |
+| **R44** | PI | PI | TL | Tidak Lolos | $0.00$ |
+| **R45** | PI | TL | SL | Tidak Lolos | $0.00$ |
+| **R46** | PI | TL | PS | Tidak Lolos | $0.00$ |
+| **R47** | PI | TL | PI | Tidak Lolos | $0.00$ |
+| **R48** | PI | TL | TL | Tidak Lolos | $0.00$ |
+| **R49** | TL | SL | SL | Tidak Lolos | $0.00$ |
+| **R50** | TL | SL | PS | Tidak Lolos | $0.00$ |
+| **R51** | TL | SL | PI | Tidak Lolos | $0.00$ |
+| **R52** | TL | SL | TL | Tidak Lolos | $0.00$ |
+| **R53** | TL | PS | SL | Tidak Lolos | $0.00$ |
+| **R54** | TL | PS | PS | Tidak Lolos | $0.00$ |
+| **R55** | TL | PS | PI | Tidak Lolos | $0.00$ |
+| **R56** | TL | PS | TL | Tidak Lolos | $0.00$ |
+| **R57** | TL | PI | SL | Tidak Lolos | $0.00$ |
+| **R58** | TL | PI | PS | Tidak Lolos | $0.00$ |
+| **R59** | TL | PI | PI | Tidak Lolos | $0.00$ |
+| **R60** | TL | PI | TL | Tidak Lolos | $0.00$ |
+| **R61** | TL | TL | SL | Tidak Lolos | $0.00$ |
+| **R62** | TL | TL | PS | Tidak Lolos | $0.00$ |
+| **R63** | TL | TL | PI | Tidak Lolos | $0.00$ |
+| **R64** | TL | TL | TL | Tidak Lolos | $0.00$ |
+
+---
+
+#### E. Defuzzifikasi Weighted Average & Ambang Batas Klasifikasi
+
+Nilai keluaran tegas (*crisp output*) $Z$ dihitung dengan metode *Weighted Average*:
+$$Z = \frac{\sum_{i=1}^{64} w_i \times z_i}{\sum_{i=1}^{64} w_i}, \quad w_i = \min(\mu_{\text{TDS}, i}, \mu_{\text{Turb}, i}, \mu_{\Delta T, i})$$
+
+Skor akhir $Z$ ($0.00 - 1.00$) diklasifikasikan ke dalam 4 tingkatan status mutu:
+
+| Rentang Skor Defuzzifikasi $Z$ | Kategori Mutu Air | Badge OLED | Pesan Tindakan |
+|:---:|---|:---:|---|
+| **$Z \ge 0.83$** | **Sangat Layak** | `S.LAYAK` | Air Sangat Layak |
+| **$0.50 \le Z < 0.83$** | **Perlu Proses Sedang** | `P.SED` | Perlu proses sedang |
+| **$0.17 \le Z < 0.50$** | **Perlu Proses Intensif** | `P.INT` | Perlu proses intensif |
+| **$Z < 0.17$** | **Tidak Lolos** | `T.LOLOS` | Tidak layak digunakan |
+
+#### F. Compliance Hard Gate (Pengunci Permenkes No. 2/2023):
+$$\text{Jika } (\text{TDS} \ge 300\text{ mg/L}) \lor (\text{Turbidity} \ge 3.0\text{ NTU}) \lor (\Delta T > 3.0^\circ\text{C}) \implies \text{Status} = \text{T.LOLOS}, \ Z = 0.00$$
+
+---
+
+#### G. Contoh Kasus Perhitungan Numerik Langkah-Demi-Langkah
+
+Misal sampel air diuji dengan kondisi:
+- Suhu Udara Manual: $T_{\text{udara}} = 28.0^\circ\text{C}$, Suhu Air Terukur: $T_{\text{air}} = 29.5^\circ\text{C} \implies \Delta T = 1.5^\circ\text{C}$
+- TDS Mentah: $218.0\text{ ppm} \implies \text{TDS}_{\text{terkompensasi}} = \frac{218.0}{1.0 + 0.02(29.5 - 25.0)} = 200.0\text{ mg/L}$
+- Turbidity: $2.0\text{ NTU}$
+
+**Langkah 1: Fuzzifikasi**
+- $\text{TDS} = 200.0$: $\mu_{\text{SL}} = \frac{225 - 200}{225 - 150} = 0.333, \quad \mu_{\text{PS}} = \frac{200 - 150}{225 - 150} = 0.667, \quad \mu_{\text{PI}} = 0, \quad \mu_{\text{TL}} = 0$
+- $\text{Turbidity} = 2.0$: $\mu_{\text{SL}} = \frac{2.25 - 2.0}{2.25 - 1.5} = 0.333, \quad \mu_{\text{PS}} = \frac{2.0 - 1.5}{2.25 - 1.5} = 0.667, \quad \mu_{\text{PI}} = 0, \quad \mu_{\text{TL}} = 0$
+- $\Delta T = 1.5^\circ\text{C}$: $\mu_{\text{SL}} = 0, \quad \mu_{\text{PS}} = \frac{1.5 - 1.0}{1.75 - 1.0} = 0.667, \quad \mu_{\text{PI}} = 0, \quad \mu_{\text{TL}} = 0$
+
+**Langkah 2: Evaluasi Aturan Aktif**
+- **R21** (PS Suhu, PS TDS, SL Turb) $\rightarrow w_{21} = \min(0.667, 0.667, 0.333) = 0.333 \implies z_{21} = 0.67$
+- **R22** (PS Suhu, PS TDS, PS Turb) $\rightarrow w_{22} = \min(0.667, 0.667, 0.667) = 0.667 \implies z_{22} = 0.67$
+
+**Langkah 3: Defuzzifikasi**
+$$Z = \frac{(0.333 \times 0.67) + (0.667 \times 0.67)}{0.333 + 0.667} = \frac{0.223 + 0.447}{1.000} = 0.67$$
+
+**Langkah 4: Keputusan Akhir**
+- $Z = 0.67$ berada pada rentang $0.50 \le Z < 0.83 \implies$ **`P.SED` (Perlu Proses Sedang)**.
+- Seluruh parameter berada di bawah batas hard gate ($\text{TDS} < 300, \text{Turb} < 3.0, \Delta T \le 3.0$), sehingga skor $Z=0.67$ sah berlaku.
+
+---
+
+### 8.2. Mode 2: Pemandian / Kolam (Non-Fuzzy Threshold Checker)
+Berdasarkan Permenkes No. 2/2023 Tabel 10 dan standar kolam renang:
+- **Suhu Air**: $16.0 - 35.0^\circ\text{C}$ $\rightarrow$ `[LAYAK]`, di luar itu $\rightarrow$ `[TDK]`
+- **Kekeruhan**: $< 0.5\text{ NTU}$ $\rightarrow$ `[LAYAK]`, di atas itu $\rightarrow$ `[TDK]`
 - **TDS**: **Bypass / Tidak Diatur** (nilai sensor tetap ditampilkan dengan tag `[BYP]`)
-- **Status Akhir**: **`LAYAK`** jika kedua parameter lolos, atau **`TIDAK LAYAK`** jika ada parameter yang gagal.
-
-### Kalibrasi Turbidity Dua Titik
-Sensor turbidity memakai kalibrasi dua titik agar slope NTU sesuai karakteristik
-sensor yang dipakai. Langkah dari menu **Kalibrasi Turbidity**:
-1. Celupkan sensor ke air jernih (0 NTU), lalu tekan `OK` untuk mengambil titik pertama.
-2. Celupkan sensor ke larutan standar. Atur nilai custom `1-3000 NTU` dengan `UP/DOWN`.
-3. Tekan `OK` untuk menyimpan kedua titik ke EEPROM Flash.
-
-Rumus yang digunakan:
-
-```text
-slope = NTU_standar / (V_jernih - V_standar)
-NTU   = (V_jernih - V_ukur) x slope
-```
-
-Jika titik kedua belum dikalibrasi, firmware memakai slope fallback `30 NTU/V`.
-Untuk sensor yang disuplai 3.3V, `TURBIDITY_INPUT_DIVIDER` tetap `1.0`.
+- **Status Akhir**: `LAYAK` jika kedua parameter lolos, `TIDAK LAYAK` jika salah satu gagal.
 
 ---
 
-## 9. Antarmuka GUI & Katalog Tampilan Layar OLED 1.3" (128x64)
+### 8.3. Kalibrasi Turbidity Dua Titik
+Rumus yang digunakan untuk menghitung slope linier akurat:
+$$\text{Slope} = \frac{\text{NTU}_{\text{standar}}}{V_{\text{jernih}} - V_{\text{standar}}}$$
+$$\text{NTU} = (V_{\text{jernih}} - V_{\text{ukur}}) \times \text{Slope}$$
 
-Panel **OLED 1.3 inci SH1106 / SSD1306** memiliki resolusi 128x64 piksel. Layout layar
-dibagi menjadi 3 zona: **Header (12 px)**, **Konten Utama (44 px)**, **Status Bar (8 px)**.
+---
 
-### 9.1. Splash Screen (Tampilan Booting)
-Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
+## 9. Antarmuka GUI & Katalog Lengkap Layar OLED 1.3" (128x64)
+
+Layout layar dibagi menjadi 3 zona: **Header (12 px)**, **Konten Utama (44 px)**, **Status Bar (8 px)**.
+
+### 9.1. Splash Screen (Tampilan Booting - 2 Detik)
 ```text
 +---------------------------------------------------+
 |                                                   |
@@ -183,8 +342,7 @@ Tampil otomatis selama **2 detik** saat perangkat baru dinyalakan.
 
 ---
 
-### 9.2. Menu Utama (Pemilihan Objek Air & Fitur)
-Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih mode.
+### 9.2. Menu Utama (Pemilihan Mode Uji Air)
 ```text
 +---------------------------------------------------+
 | Pilih Mode Uji Air                                |
@@ -200,9 +358,27 @@ Navigasi tombol `UP`/`DOWN` menggeser kursor `>`. Tekan `OK` untuk memilih mode.
 
 ---
 
-### 9.3. Screen Tunggu (Stabilisasi Sensor - 5 Detik)
-Tampil selama **5 detik** setelah memilih mode air untuk memberikan waktu
-stabilisasi pembacaan filter *Circular Moving Average* (20 sampel).
+### 9.3. Input Suhu Udara Manual (Khusus Mode 1)
+Pengguna mengatur suhu lingkungan sekitar sebelum mencelupkan sensor ($10.0 - 45.0^\circ\text{C}$).
+```text
++---------------------------------------------------+
+| Input Suhu Udara                                  |
+|---------------------------------------------------|
+| Udara: [ 28.0 C ]                                 |
+| UP/DN: +/-0.1 C                                   |
+| LF/RT: +/-1.0 C                                   |
+|                                                   |
+|---------------------------------------------------|
+| OK:Mulai                               BACK:Batal |
++---------------------------------------------------+
+```
+
+---
+
+### 9.4. Screen Tunggu & Stabilisasi Suhu Probe
+Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\le 0.2^\circ\text{C}$).
+
+**Tampilan Stabilisasi Normal:**
 ```text
 +---------------------------------------------------+
 | MODE: AIR MINUM                                   |
@@ -211,41 +387,53 @@ stabilisasi pembacaan filter *Circular Moving Average* (20 sampel).
 |   Membaca Sensor...                               |
 |   [||||||||||||||||||................]            |
 |                       60%                         |
+|   Stabil: 2/3                                     |
 |---------------------------------------------------|
-| Stabilisasi...                         BACK:Batal |
+| Tunggu stabil...                       BACK:Batal |
++---------------------------------------------------+
+```
+
+**Tampilan Bila Timeout (60 Detik):**
+```text
++---------------------------------------------------+
+| MODE: AIR MINUM                                   |
+|---------------------------------------------------|
+| Suhu belum stabil                                 |
+| OK: lanjut manual                                 |
+|                                                   |
+|                                                   |
+|---------------------------------------------------|
+| OK:Lanjut                              BACK:Batal |
 +---------------------------------------------------+
 ```
 
 ---
 
-### 9.4. Layar Hasil Pengukuran - Three-Page View
-Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Navigasi**:
-
-#### Mode 1: Air Minum & Higiene Sanitasi (Fuzzy Sugeno)
+### 9.5. Layar Pengukuran Mode 1: Air Minum & Higiene (Three-Page View)
 
 **Halaman 1/3: Dashboard Hasil Sensor & Skor Mutu**
 ```text
 +---------------------------------------------------+
 | Air Minum (1/3)                                   |
 |---------------------------------------------------|
-| Suhu : 27.5 C (Normal)                            |
+| Air:31.0C dT:3.0                                  |
 | TDS  : 280.0 ppm                                  |
 | Turb : 1.5 NTU                                    |
-| Skor : 1.00 [S.LAYAK]                             |
+| Skor : 0.67 [P.SED]                               |
 |---------------------------------------------------|
 | DN:Detail                               BACK:Menu |
 +---------------------------------------------------+
 ```
 
-**Halaman 2/3: Diagnosis Parameter Penyebab**
+**Halaman 2/3: Diagnosis Tiap Parameter**
 ```text
 +---------------------------------------------------+
 | Diagnosis (2/3)                                   |
 |---------------------------------------------------|
-| Mutu: S.LAYAK                                     |
-| Suhu: Normal                                      |
-| TDS : Ideal                                       |
-| Turb: Jernih                                      |
+| Mutu: P.SED                                       |
+| dT  : P.Sed                                       |
+| TDS : S.Layak                                     |
+| Turb: S.Layak                                     |
 |---------------------------------------------------|
 | DN:Saran                                BACK:Menu |
 +---------------------------------------------------+
@@ -256,19 +444,18 @@ Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Nav
 +---------------------------------------------------+
 | Saran (3/3)                                       |
 |---------------------------------------------------|
-| Air layak digunakan                               |
-| Pantau berkala                                    |
+| Suhu: sesuaikan suhu                              |
+| Uji ulang air                                     |
 |                                                   |
 |                                                   |
 |---------------------------------------------------|
 | UP:Diagnosis                            BACK:Menu |
 +---------------------------------------------------+
 ```
-*(Bila ada parameter bermasalah, halaman 3 langsung menyarankan tindakan tepat, misal: `TDS : RO/ganti air`, `Turb: filter total`, `Suhu: hangatkan air`, `Uji ulang air`).*
 
 ---
 
-#### Mode 2: Pemandian / Kolam (Non-Fuzzy Threshold Checker)
+### 9.6. Layar Pengukuran Mode 2: Pemandian / Kolam (Three-Page View)
 
 **Halaman 1/3: Dashboard Per-Parameter**
 ```text
@@ -311,14 +498,12 @@ Menampilkan hasil pengolahan data sensor secara bertahap melalui **3 Halaman Nav
 | UP:Diagnosis                            BACK:Menu |
 +---------------------------------------------------+
 ```
-*(Bila ada parameter tidak aman, halaman 3 menampilkan: `Suhu: atur suhu air`, `Turb: jernihkan air`, `Uji ulang air`).*
 
 ---
 
-### 9.5. Menu Kalibrasi Sensor & Sub-menu (CALIBRATION)
-Mengelola kalibrasi probe TDS, Turbidity (2-titik), Suhu, dan Reset Pabrik.
+### 9.7. Sub-Menu Kalibrasi Sensor & Halaman Wizard
 
-#### Menu Pilihan Kalibrasi:
+**Daftar Menu Kalibrasi:**
 ```text
 +---------------------------------------------------+
 | Kalibrasi Sensor                                  |
@@ -332,8 +517,7 @@ Mengelola kalibrasi probe TDS, Turbidity (2-titik), Suhu, dan Reset Pabrik.
 +---------------------------------------------------+
 ```
 
-#### 1. Kalibrasi TDS:
-Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk menyelaraskan nilai target acuan (presisi `+-1 ppm`), lalu tekan `OK` untuk menyimpan.
+**1. Kalibrasi TDS ($\pm 1\text{ ppm}$ step):**
 ```text
 +---------------------------------------------------+
 | Kalibrasi TDS                                     |
@@ -347,10 +531,7 @@ Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk m
 +---------------------------------------------------+
 ```
 
-#### 2. Kalibrasi Turbidity Dua Titik:
-- **Langkah 1/2**: Celupkan sensor ke air jernih (0 NTU), tekan `OK` untuk merekam tegangan $V_{\text{clear}}$.
-- **Langkah 2/2**: Celupkan ke larutan standar. Atur nilai NTU custom (`1-3000 NTU`, step `+-5 NTU`) dengan `UP`/`DOWN`, lalu tekan `OK` untuk mengunci slope dan menyimpan ke EEPROM.
-
+**2. Kalibrasi Turbidity 2-Titik Wizard ($\pm 5\text{ NTU}$ custom step):**
 ```text
 +---------------------------------------------------+
 | Turbidity (1/2)                                   |
@@ -375,8 +556,7 @@ Celupkan probe ke larutan standar (misal `707 ppm`). Gunakan `UP`/`DOWN` untuk m
 +---------------------------------------------------+
 ```
 
-#### 3. Kalibrasi Suhu:
-Bandingkan suhu raw dengan termometer presisi. Gunakan `LEFT`/`RIGHT` untuk mengatur offset ($\pm 0.1\text{ }^\circ\text{C}$), lalu tekan `OK`.
+**3. Kalibrasi Suhu Offset ($\pm 0.1^\circ\text{C}$ step):**
 ```text
 +---------------------------------------------------+
 | Kalibrasi Suhu                                    |
@@ -390,8 +570,7 @@ Bandingkan suhu raw dengan termometer presisi. Gunakan `LEFT`/`RIGHT` untuk meng
 +---------------------------------------------------+
 ```
 
-#### 4. Konfirmasi Reset Pabrik:
-Mencegah data kalibrasi dan pengaturan OLED terhapus secara tidak sengaja.
+**4. Konfirmasi Pengaman Reset Pabrik:**
 ```text
 +---------------------------------------------------+
 | Reset Pabrik?                                     |
@@ -407,9 +586,9 @@ Mencegah data kalibrasi dan pengaturan OLED terhapus secara tidak sengaja.
 
 ---
 
-### 9.6. Menu Pengaturan OLED (Tersimpan di EEPROM)
-Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*. Nilai otomatis tersimpan permanen ke EEPROM Flash saat selesai diatur.
+### 9.8. Menu Pengaturan OLED (Tersimpan Permanen di EEPROM)
 
+**Daftar Pengaturan OLED:**
 ```text
 +---------------------------------------------------+
 | Pengaturan OLED                                   |
@@ -423,10 +602,7 @@ Mengatur tingkat Kecerahan dan Kontras OLED secara *real-time*. Nilai otomatis t
 +---------------------------------------------------+
 ```
 
-#### Adjust Mode Brightness / Kontras
-Tekan `OK` pada `Brightness` atau `Kontras` untuk masuk mode edit (`*`).
-Gunakan `LEFT`/`RIGHT` untuk mengubah nilai. Tekan `OK` atau `BACK` untuk
-selesai dan menjadwalkan penyimpanan EEPROM.
+**Mode Edit Nilai Kecerahan/Kontras (`*`):**
 ```text
 +---------------------------------------------------+
 | Pengaturan OLED                                   |
@@ -436,33 +612,15 @@ selesai dan menjadwalkan penyimpanan EEPROM.
 |   Reset Pengaturan                                |
 |   Informasi Firmware                              |
 |---------------------------------------------------|
-| OK:Pilih                                BACK:Menu |
-+---------------------------------------------------+
-```
-
-#### Reset Pengaturan OLED
-Pilih `Reset Pengaturan`, lalu tekan `OK`. Brightness dan kontras kembali ke
-nilai default serta disimpan ke EEPROM. Selama write Flash tertunda, status bar
-menampilkan `Menyimpan...`.
-```text
-+---------------------------------------------------+
-| Pengaturan OLED                                   |
-|---------------------------------------------------|
-| > Brightness                           200        |
-|   Kontras                              128        |
-|   Reset Pengaturan                                |
-|   Informasi Firmware                              |
-|---------------------------------------------------|
-| Menyimpan...                            BACK:Menu |
+| LF/RT:Ubah                             OK:Selesai |
 +---------------------------------------------------+
 ```
 
 ---
 
-### 9.7. Layar Informasi Sistem (ABOUT — Dual-Page View)
-Menampilkan identitas firmware, tipe hardware, dan status FreeRTOS yang dipisah menjadi **2 Halaman**:
+### 9.9. Layar Informasi Sistem (ABOUT — 2 Halaman)
 
-#### Halaman 1/2: Software & Metodologi
+**Halaman 1/2: Software & Regulasi:**
 ```text
 +---------------------------------------------------+
 | Tentang (1/2)                                     |
@@ -476,7 +634,7 @@ Menampilkan identitas firmware, tipe hardware, dan status FreeRTOS yang dipisah 
 +---------------------------------------------------+
 ```
 
-#### Halaman 2/2: Hardware & Memori
+**Halaman 2/2: Hardware & Memori:**
 ```text
 +---------------------------------------------------+
 | Tentang (2/2)                                     |
@@ -494,14 +652,14 @@ Menampilkan identitas firmware, tipe hardware, dan status FreeRTOS yang dipisah 
 
 ## 10. Pengujian & Validasi Baseline
 
-Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` akan mengeksekusi uji coba validasi otomatis 1x pada `Serial`:
+Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` mengeksekusi uji coba validasi otomatis 1x pada `Serial` (115200 baud):
 
 ```text
 ========================================
     VALIDASI AUTOMATIS FIRMWARE         
 ========================================
 Air Minum (Ideal)     : 1.00 [S.LAYAK]
-Air Minum (1 Batas)   : 0.75 [LAYAK]
+Air Minum (1 Batas)   : 0.67 [P.SED]
 Pemandian (28C, 0.3NTU): [LAYAK]
 Pemandian (28C, 2.5NTU): [TDK LAYAK]
 Turb 2 titik (2.50V): 50.0 NTU
@@ -516,28 +674,28 @@ Turb 2 titik (2.50V): 50.0 NTU
 1. Tempatkan probe DS18B20 bersama termometer laboratorium presisi di dalam wadah air yang sama.
 2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Suhu**.
 3. Bandingkan nilai **Suhu Raw** pada layar dengan termometer acuan.
-4. Tekan tombol `LEFT` atau `RIGHT` untuk menyelaraskan nilai **Offset** ($\pm 0.1\text{ }^\circ\text{C}$).
-5. Tekan tombol **OK** untuk menyimpan nilai offset ke EEPROM Flash.
+4. Tekan tombol `LEFT` atau `RIGHT` untuk menyelaraskan nilai **Offset** ($\pm 0.1^\circ\text{C}$).
+5. Tekan tombol **OK** untuk menyimpan nilai offset ke Flash EEPROM.
 
 ### B. Kalibrasi TDS (1-Point Solution)
 1. Siapkan larutan standar TDS acuan (misal **707 ppm**).
 2. Celupkan probe TDS ke dalam larutan dan tunggu pembacaan stabil.
 3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi TDS**.
 4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`) dengan ketelitian **$\pm 1\text{ ppm}$**.
-5. Tekan tombol **OK** untuk menghitung $K$-Factor baru dan menyimpannya ke EEPROM Flash.
+5. Tekan tombol **OK** untuk menghitung $K$-Factor baru dan menyimpannya ke Flash EEPROM.
 
 ### C. Kalibrasi Turbidity (2-Point Custom Wizard)
 1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Turbidity**.
 2. **Titik 1 (0 NTU)**: Celupkan sensor ke air aquades murni. Amati nilai voltase hingga stabil, lalu tekan **OK**.
 3. **Titik 2 (Standar Custom)**: Celupkan sensor ke larutan standar (misal **100 NTU** atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka standar di layar dengan larutan yang dipakai (kenaikan **$\pm 5\text{ NTU}$**).
-4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor, dan menyimpannya ke EEPROM Flash.
+4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor, dan menyimpannya ke Flash EEPROM.
 
 ---
 
 ## 12. Cara Build dan Upload
 
-1. Buka folder proyek ini pada **Arduino IDE** atau **VS Code + STM32duino**.
+1. Buka folder `main` proyek ini pada **Arduino IDE** atau **VS Code + STM32duino**.
 2. Pilih Board: **Generic STM32F4 series** $\rightarrow$ **BlackPill F401CC**.
 3. Pastikan library pendukung terinstall: `STM32duino FreeRTOS`, `U8g2`, `OneWire`, `DallasTemperature`.
-4. Compile dan upload firmware ke STM32 Blackpill.
+4. Compile dan upload firmware ke STM32 BlackPill via ST-Link V2 atau DFU USB.
 5. Buka Serial Monitor pada baud rate `115200` untuk mengamati log startup validasi dan telemetri debug.
