@@ -148,29 +148,24 @@ float sensors_voltageToTds(float voltage, float temperature) {
         return 0.0f;
     }
 
-    // Kompensasi suhu dilakukan pada tegangan, sesuai contoh resmi DFRobot.
-    // Bila pembacaan suhu tidak tersedia, temperature akan bernilai 0.0 yang
-    // menghasilkan faktor 0.5 — karena itu suhu di luar rentang wajar
-    // diperlakukan sebagai suhu acuan agar tidak menyimpangkan hasil.
+    // TDS mentah dihitung dahulu dari polinomial, lalu dikompensasi ke 25 C.
     float temperatureForComp = temperature;
     if (temperatureForComp < 1.0f || temperatureForComp > 60.0f) {
         temperatureForComp = TDS_TEMP_REFERENCE;
     }
 
-    // Menggunakan base room temp untuk perhitungan deviasi offset
     float factor = 1.0f + 0.02f * (temperatureForComp - 25.0f);
     if (factor < 0.1f) {
         factor = 0.1f;   // proteksi pembagian mendekati nol
     }
-    const float compensatedVoltage = voltage / factor;
-
     // Polinomial DFRobot: EC (uS/cm) dari tegangan, lalu EC -> ppm.
-    const float v  = compensatedVoltage;
+    const float v  = voltage;
     const float v2 = v * v;
     const float v3 = v2 * v;
     const float ec = TDS_POLY_C3 * v3 + TDS_POLY_C2 * v2 + TDS_POLY_C1 * v;
 
-    float ppm = ec * TDS_EC_TO_PPM_FACTOR * g_calibParams.tdsKFactor;
+    const float rawPpm = ec * TDS_EC_TO_PPM_FACTOR;
+    float ppm = (rawPpm / factor) * g_calibParams.tdsKFactor;
 
     if (ppm < 0.0f) ppm = 0.0f;                 // polinomial bisa negatif di V sangat kecil
     if (ppm > 2000.0f) ppm = 2000.0f;           // jepit ke batas wajar sensor
@@ -271,6 +266,7 @@ void sensors_processFuzzy() {
     float tdsSnapshot = 0.0f;
     float turbSnapshot = 0.0f;
     bool tempValid = false;
+    float ambientSnapshot = AMBIENT_TEMP_DEFAULT;
     WaterParameter activeParam = WaterParameter::AIR_MINUM_HIGIENE;
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) != pdTRUE) {
@@ -283,6 +279,7 @@ void sensors_processFuzzy() {
     tdsSnapshot  = g_sensorData.tdsFiltered;
     turbSnapshot = g_sensorData.turbidityFiltered;
     activeParam  = g_systemState.activeParameter;
+    ambientSnapshot = g_systemState.ambientTemperature;
     xSemaphoreGive(g_dataMutex);
 
     const float tdsComp = tdsSnapshot;
@@ -291,10 +288,11 @@ void sensors_processFuzzy() {
 
     ThresholdResult_t thResult = { false, false, false };
     KualitasAir_t qStatus = STATUS_TIDAK_LOLOS;
-    StatusSuhu_t tStatus = SUHU_NORMAL;
+    StatusSuhu_t tStatus = SUHU_SL;
     uint8_t tdsSeverity = 0;
     uint8_t turbiditySeverity = 0;
     uint8_t temperatureSeverity = 0;
+    float deltaTemp = 0.0f;
 
     if (activeParam == WaterParameter::PEMANDIAN_KOLAM) {
         // Mode Pemandian / Kolam: Evaluasi Threshold Langsung (Non-Fuzzy)
@@ -302,35 +300,35 @@ void sensors_processFuzzy() {
         thResult = Threshold_CekPemandianKolam(tempSnapshot, turbSnapshot);
         skor = thResult.semuaAman ? 1.0f : 0.0f;
         qStatus = thResult.semuaAman ? STATUS_SANGAT_LAYAK : STATUS_TIDAK_LOLOS;
-        tStatus = thResult.suhuAman ? SUHU_NORMAL
-                                    : ((tempSnapshot < PEMANDIAN_KOLAM_SUHU_MIN)
-                                           ? SUHU_DINGIN : SUHU_PANAS);
+        tStatus = thResult.suhuAman ? SUHU_SL : SUHU_TL;
         turbiditySeverity = thResult.turbidityAman ? 0 : 2;
         temperatureSeverity = thResult.suhuAman ? 0 : 2;
     } else {
-        // Mode Air Minum & Higiene: suhu air absolut masuk langsung ke FIS.
-        skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, tempSnapshot);
+        deltaTemp = tempValid ? fabs(tempSnapshot - ambientSnapshot) : profil->tempMax;
+        skor = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, deltaTemp);
         qStatus = FuzzyKualitasAir_GetStatusProfil(profil, skor);
-        tStatus = tempValid ? FuzzyKualitasAir_CekStatusSuhu(tempSnapshot, profil) : SUHU_NORMAL;
-        tdsSeverity = (tdsComp <= profil->tds0_c) ? 0 :
-                      ((tdsComp <= profil->tds1_c) ? 1 : 2);
-        turbiditySeverity = (turbSnapshot <= profil->turb0_c) ? 0 :
-                             ((turbSnapshot <= profil->turb1_c) ? 1 : 2);
-        // Severity: Normal=0, Dingin=1, Panas=2.
-        temperatureSeverity = (tempSnapshot >= profil->suhuNormal_a &&
-                               tempSnapshot <= profil->suhuNormal_c) ? 0 :
-                              ((tempSnapshot < profil->suhuNormal_a) ? 1 : 2);
+        tStatus = FuzzyKualitasAir_CekStatusSuhu(deltaTemp, profil);
+        tdsSeverity = (tdsComp < 225.0f) ? 0 : (tdsComp < 300.0f ? 1 : (tdsComp < 450.0f ? 2 : 3));
+        turbiditySeverity = (turbSnapshot < 2.25f) ? 0 : (turbSnapshot < 3.0f ? 1 : (turbSnapshot < 4.5f ? 2 : 3));
+        temperatureSeverity = static_cast<uint8_t>(tStatus);
+        // Kepatuhan regulasi bersifat tegas; fuzzy tetap dipakai sebagai early warning.
+        if (tdsComp >= 300.0f || turbSnapshot >= 3.0f || deltaTemp > 3.0f) {
+            skor = 0.0f;
+            qStatus = STATUS_TIDAK_LOLOS;
+        }
     }
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         g_sensorData.tdsCompensated   = tdsComp;
         g_sensorData.fuzzyScore       = skor;
+        g_sensorData.fuzzyScoreRaw    = FuzzyKualitasAir_HitungSkor_AirMinum(profil, tdsComp, turbSnapshot, deltaTemp);
         g_sensorData.qualityStatus    = qStatus;
         g_sensorData.tempStatus       = tStatus;
         g_sensorData.thresholdResult  = thResult;
         g_sensorData.tdsSeverity      = tdsSeverity;
         g_sensorData.turbiditySeverity = turbiditySeverity;
         g_sensorData.temperatureSeverity = temperatureSeverity;
+        g_systemState.temperatureDelta = deltaTemp;
 
         g_systemState.displayDirty  = true;
         xSemaphoreGive(g_dataMutex);

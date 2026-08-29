@@ -46,7 +46,7 @@ bool globals_init() {
     g_sensorData.tdsCompensated     = 0.0f;
     g_sensorData.fuzzyScore         = 0.0f;
     g_sensorData.qualityStatus      = STATUS_TIDAK_LOLOS;
-    g_sensorData.tempStatus         = SUHU_NORMAL;
+    g_sensorData.tempStatus         = SUHU_SL;
     g_sensorData.thresholdResult    = { false, false, false };
     g_sensorData.tdsSeverity        = 0;
     g_sensorData.turbiditySeverity  = 0;
@@ -70,6 +70,10 @@ bool globals_init() {
     g_systemState.cursorIndex        = 0;
     g_systemState.measurementSubPage = 0;
     g_systemState.aboutSubPage       = 0;
+    g_systemState.ambientTemperature = AMBIENT_TEMP_DEFAULT;
+    g_systemState.temperatureDelta   = 0.0f;
+    g_systemState.stabilizationCount = 0;
+    g_systemState.stabilizationTimedOut = false;
     g_systemState.calibTdsTarget     = TDS_CALIB_TARGET_DEFAULT;
     g_systemState.calibTurbidityTarget = static_cast<uint16_t>(g_calibParams.turbidityNtuStandard);
     g_systemState.calibTurbidityStep = 0;

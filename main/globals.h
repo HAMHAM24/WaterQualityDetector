@@ -61,6 +61,7 @@ enum class WaterParameter : uint8_t {
 enum class MenuState : uint8_t {
     SPLASH = 0,
     HOME,
+    INPUT_AMBIENT_TEMPERATURE,
     WAITING_SAMPLING,
     MEASUREMENT,
     CALIBRATION,
@@ -89,8 +90,9 @@ struct SensorData {
     // --- Hasil Olahan Fuzzy Logic & Threshold ---
     float tdsCompensated;        // TDS setelah kompensasi suhu
     float fuzzyScore;            // Skor Fuzzy Sugeno (0.0 - 1.0)
-    KualitasAir_t qualityStatus; // SANGAT_LAYAK, LAYAK_SARING_RINGAN, dll
-    StatusSuhu_t tempStatus;     // IDEAL, MENYIMPANG, EKSTREM
+    float fuzzyScoreRaw;         // Skor sebelum compliance gate Permenkes
+    KualitasAir_t qualityStatus; // SANGAT_LAYAK, PROSES_SEDANG, PROSES_INTENSIF, TIDAK_LOLOS
+    StatusSuhu_t tempStatus;     // SL, PS, PI, TL untuk deviasi suhu
     ThresholdResult_t thresholdResult; // Hasil evaluasi threshold (khusus Pemandian)
     uint8_t tdsSeverity;         // 0=Ideal, 1=Batas, 2=Tinggi
     uint8_t turbiditySeverity;   // 0=Jernih, 1=Sedang, 2=Keruh
@@ -129,6 +131,10 @@ struct SystemState {
     uint8_t cursorIndex;              // index kursor pada menu berjalan
     uint8_t measurementSubPage;       // 0 = Data Sensor + Skor, 1 = Detail Fuzzy & Rekomendasi
     uint8_t aboutSubPage;             // 0 = Firmware & Sistem, 1 = Hardware & Memori
+    float ambientTemperature;         // Suhu udara manual untuk evaluasi Delta T
+    float temperatureDelta;           // |suhu air - suhu udara| dalam C
+    uint8_t stabilizationCount;       // Jumlah pembacaan suhu stabil berurutan
+    bool stabilizationTimedOut;       // Menunggu keputusan manual setelah timeout
 
     uint16_t calibTdsTarget;          // nilai acuan larutan TDS pada layar kalibrasi
     uint16_t calibTurbidityTarget;    // nilai custom titik kedua turbidity (NTU)

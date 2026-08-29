@@ -101,26 +101,28 @@ constexpr float TEMP_OFFSET_LIMIT   = 5.0f;
 constexpr uint8_t WATER_PROFILE_COUNT = 1;
 
 constexpr FuzzyProfil_t WATER_QUALITY_PROFILES[WATER_PROFILE_COUNT] = {
-    // [0] AIR MINUM & HIGIENE SANITASI (TDS, Turb, Suhu air absolut)
+    // [0] AIR MINUM & HIGIENE: TDS, Turbidity, Delta Suhu terhadap udara manual.
     {
-        150.0f, 250.0f,          // TDS 0 (Ideal <= 250)
-        150.0f, 300.0f, 450.0f,  // TDS 1 (Batas 150-450, acuan Permenkes < 300)
-        300.0f, 450.0f, 2000.0f, // TDS 2 (Tinggi > 450)
-
-        1.5f, 2.5f,              // Turb 0 (Jernih <= 2.5)
-        1.5f, 3.0f, 5.0f,        // Turb 1 (Sedang 1.5-5.0, acuan Permenkes < 3)
-        4.0f, 6.0f, 100.0f,      // Turb 2 (Keruh >= 6)
-
-        24.0f, 28.0f,            // Dingin: trapmf [0 0 24 28]
-        24.0f, 28.0f, 32.0f,     // Normal: trimf [24 28 32]
-        28.0f, 32.0f, 50.0f,     // Panas : trapmf [28 32 50 50]
-
-        0.875f, 0.625f, 0.375f, 0.125f // Thresholds status mutu
+        150.0f, 225.0f, 150.0f, 225.0f, 300.0f,  // TDS SL, PS
+        225.0f, 300.0f, 450.0f, 300.0f, 450.0f, 600.0f, // TDS PI, TL
+        1.5f, 2.25f, 1.5f, 2.25f, 3.0f,             // Turb SL, PS
+        2.25f, 3.0f, 4.5f, 3.0f, 4.5f, 25.0f,       // Turb PI, TL
+        1.0f, 1.5f, 1.0f, 1.75f, 2.5f,              // Delta T SL, PS
+        2.0f, 2.75f, 3.5f, 3.0f, 4.0f, 10.0f,       // Delta T PI, TL
+        0.83f, 0.50f, 0.17f                         // Threshold output
     }
 };
 
 // Referensi kompensasi sensor TDS standar adalah 25 C; bukan input fuzzy suhu.
 constexpr float TDS_TEMP_REFERENCE = 25.0f;
+constexpr float AMBIENT_TEMP_DEFAULT = 25.0f;
+constexpr float AMBIENT_TEMP_MIN = 10.0f;
+constexpr float AMBIENT_TEMP_MAX = 45.0f;
+constexpr float AMBIENT_TEMP_FINE_STEP = 0.1f;
+constexpr float AMBIENT_TEMP_COARSE_STEP = 1.0f;
+constexpr float TEMP_STABLE_DELTA_C = 0.2f;
+constexpr uint8_t TEMP_STABLE_REQUIRED_SAMPLES = 3;
+constexpr uint32_t TEMP_STABILIZATION_TIMEOUT_MS = 60000;
 
 // =============================================================================
 // AMBANG BATAS CRISP PEMANDIAN / KOLAM (Non-Fuzzy Threshold Checker)

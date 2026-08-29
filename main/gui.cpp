@@ -56,6 +56,9 @@ static constexpr uint8_t SETTINGS_IDX_INFO       = 3;
 // Pewaktu berbasis milidetik sejak boot
 static uint32_t s_splashStartTick   = 0;
 static uint32_t s_samplingStartTick = 0;
+static uint32_t s_stabilitySampleTick = 0;
+static float s_stabilityMin = 0.0f;
+static float s_stabilityMax = 0.0f;
 
 // =============================================================================
 // SNAPSHOT — salinan lokal data global yang dibaca semua fungsi draw*()
@@ -168,6 +171,12 @@ static void drawWaitingSampling() {
     display_drawHeader(modeTitle);
 
     g_u8g2.setFont(u8g2_font_6x10_tf);
+    if (s_viewState.stabilizationTimedOut) {
+        g_u8g2.drawStr(2, MENU_FIRST_LINE_Y, "Suhu belum stabil");
+        g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + MENU_LINE_HEIGHT, "OK: lanjut manual");
+        display_drawStatusBar("OK:Lanjut", "BACK:Batal");
+        return;
+    }
     g_u8g2.drawStr(12, 26, "Membaca Sensor...");
 
     // Progress bar dinamis (durasi SAMPLING_SCREEN_MS = 5000 ms)
@@ -194,7 +203,25 @@ static void drawWaitingSampling() {
     snprintf(pctBuf, sizeof(pctBuf), "%u%%", static_cast<unsigned>(progress * 100.0f));
     g_u8g2.drawStr(centeredX(pctBuf), 51, pctBuf);
 
-    display_drawStatusBar("Stabilisasi...", "BACK:Batal");
+    char stability[24];
+    snprintf(stability, sizeof(stability), "Stabil: %u/%u", s_viewState.stabilizationCount,
+             TEMP_STABLE_REQUIRED_SAMPLES);
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + 3 * MENU_LINE_HEIGHT, stability);
+    display_drawStatusBar("Tunggu stabil...", "BACK:Batal");
+}
+
+static void drawAmbientTemperatureInput() {
+    display_drawHeader("Input Suhu Udara");
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    char value[8];
+    char line[32];
+    dtostrf(s_viewState.ambientTemperature, 4, 1, value);
+    char* p = value; while (*p == ' ') ++p;
+    snprintf(line, sizeof(line), "Udara: [ %s C ]", p);
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y, line);
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + MENU_LINE_HEIGHT, "UP/DN: +/-0.1 C");
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + 2 * MENU_LINE_HEIGHT, "LF/RT: +/-1.0 C");
+    display_drawStatusBar("OK:Mulai", "BACK:Batal");
 }
 
 /** @brief Mencetak satu baris nilai sensor dengan label dan satuan. */
@@ -350,8 +377,8 @@ static void drawMeasurement() {
             dtostrf(s_view.temperature, 4, 1, tStr);
             char* p = tStr;
             while (*p == ' ') p++;
-            snprintf(tempBuf, sizeof(tempBuf), "Suhu : %s C (%s)", p,
-                     FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus));
+            snprintf(tempBuf, sizeof(tempBuf), "Air:%sC dT:%.1f", p,
+                     s_viewState.temperatureDelta);
         } else {
             snprintf(tempBuf, sizeof(tempBuf), "Suhu : ERROR");
         }
@@ -391,8 +418,7 @@ static void drawMeasurement() {
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
-        snprintf(lineBuf, sizeof(lineBuf), "Suhu: %s", severityLabel(
-                 s_view.temperatureSeverity, "Normal", "Dingin", "Panas"));
+        snprintf(lineBuf, sizeof(lineBuf), "dT  : %s", FuzzyKualitasAir_GetStatusSuhuStr(s_view.tempStatus));
         g_u8g2.drawStr(2, y, lineBuf);
         y += MENU_LINE_HEIGHT;
 
@@ -640,6 +666,7 @@ typedef void (*DrawFn)();
 static DrawFn s_drawTable[static_cast<uint8_t>(MenuState::COUNT)] = {
     drawSplash,             // SPLASH
     drawHome,               // HOME
+    drawAmbientTemperatureInput, // INPUT_AMBIENT_TEMPERATURE
     drawWaitingSampling,    // WAITING_SAMPLING
     drawMeasurement,        // MEASUREMENT
     drawCalibration,        // CALIBRATION
@@ -710,12 +737,15 @@ void gui_update(const ButtonEventMsg& msg) {
                 switch (g_systemState.cursorIndex) {
                     case 0:
                         g_systemState.activeParameter = WaterParameter::AIR_MINUM_HIGIENE;
-                        s_samplingStartTick = millis();
-                        transitionToLocked(MenuState::WAITING_SAMPLING);
+                        g_systemState.ambientTemperature = AMBIENT_TEMP_DEFAULT;
+                        transitionToLocked(MenuState::INPUT_AMBIENT_TEMPERATURE);
                         break;
                     case 1:
                         g_systemState.activeParameter = WaterParameter::PEMANDIAN_KOLAM;
                         s_samplingStartTick = millis();
+                        s_stabilitySampleTick = 0;
+                        g_systemState.stabilizationCount = 0;
+                        g_systemState.stabilizationTimedOut = false;
                         transitionToLocked(MenuState::WAITING_SAMPLING);
                         break;
                     case 2:
@@ -730,7 +760,30 @@ void gui_update(const ButtonEventMsg& msg) {
             }
             break;
 
+        case MenuState::INPUT_AMBIENT_TEMPERATURE:
+            if (isRepeatable && (msg.id == ButtonID::UP || msg.id == ButtonID::DOWN ||
+                                 msg.id == ButtonID::LEFT || msg.id == ButtonID::RIGHT)) {
+                float step = (msg.id == ButtonID::UP || msg.id == ButtonID::DOWN)
+                                 ? AMBIENT_TEMP_FINE_STEP : AMBIENT_TEMP_COARSE_STEP;
+                if (msg.id == ButtonID::DOWN || msg.id == ButtonID::LEFT) step = -step;
+                g_systemState.ambientTemperature = constrain(g_systemState.ambientTemperature + step,
+                                                             AMBIENT_TEMP_MIN, AMBIENT_TEMP_MAX);
+                g_systemState.displayDirty = true;
+            } else if (isActivate && msg.id == ButtonID::OK) {
+                s_samplingStartTick = millis();
+                s_stabilitySampleTick = 0;
+                g_systemState.stabilizationCount = 0;
+                g_systemState.stabilizationTimedOut = false;
+                transitionToLocked(MenuState::WAITING_SAMPLING);
+            } else if (isActivate && msg.id == ButtonID::BACK) {
+                transitionToLocked(MenuState::HOME);
+            }
+            break;
+
         case MenuState::WAITING_SAMPLING:
+            if (isActivate && msg.id == ButtonID::OK && g_systemState.stabilizationTimedOut) {
+                transitionToLocked(MenuState::MEASUREMENT);
+            }
             // Tombol BACK membatalkan tunggu pembacaan dan kembali ke Menu Utama
             if (isActivate && msg.id == ButtonID::BACK) {
                 transitionToLocked(MenuState::HOME);
@@ -966,19 +1019,38 @@ void gui_tick() {
             }
         }
     }
-    // 2. Transisi otomatis Screen Tunggu Pembacaan Sensor (5 detik)
+    // 2. Stabilisasi suhu probe setelah dicelupkan ke sampel.
     else if (g_systemState.currentMenu == MenuState::WAITING_SAMPLING) {
-        if ((millis() - s_samplingStartTick) >= SAMPLING_SCREEN_MS) {
-            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+        if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+            const uint32_t now = millis();
+            if (!g_systemState.stabilizationTimedOut &&
+                g_sensorData.temperatureStatus == SensorStatus::OK &&
+                now - s_stabilitySampleTick >= TASK_PERIOD_TEMPERATURE_MS) {
+                if (g_systemState.stabilizationCount == 0) {
+                    s_stabilityMin = g_sensorData.temperature;
+                    s_stabilityMax = g_sensorData.temperature;
+                } else {
+                    if (g_sensorData.temperature < s_stabilityMin) s_stabilityMin = g_sensorData.temperature;
+                    if (g_sensorData.temperature > s_stabilityMax) s_stabilityMax = g_sensorData.temperature;
+                }
+                if (s_stabilityMax - s_stabilityMin <= TEMP_STABLE_DELTA_C) {
+                    g_systemState.stabilizationCount++;
+                } else {
+                    g_systemState.stabilizationCount = 1;
+                    s_stabilityMin = g_sensorData.temperature;
+                    s_stabilityMax = g_sensorData.temperature;
+                }
+                s_stabilitySampleTick = now;
+            }
+            if (g_systemState.stabilizationCount >= TEMP_STABLE_REQUIRED_SAMPLES) {
                 transitionToLocked(MenuState::MEASUREMENT);
-                xSemaphoreGive(g_dataMutex);
-            }
-        } else {
-            // Tandai display dirty agar animasi progress bar berjalan mulus
-            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+            } else if (now - s_samplingStartTick >= TEMP_STABILIZATION_TIMEOUT_MS) {
+                g_systemState.stabilizationTimedOut = true;
                 g_systemState.displayDirty = true;
-                xSemaphoreGive(g_dataMutex);
+            } else {
+                g_systemState.displayDirty = true;
             }
+            xSemaphoreGive(g_dataMutex);
         }
     }
 }

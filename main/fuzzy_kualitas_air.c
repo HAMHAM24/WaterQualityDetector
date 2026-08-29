@@ -1,297 +1,118 @@
-/* ==========================================================================
- * fuzzy_kualitas_air.c
- * Implementasi Fuzzy Sugeno Order-0 untuk klasifikasi kualitas air.
- * Mengadaptasi prinsip "limiting parameter" sesuai matriks severity.
- * ========================================================================== */
-
+/* Fuzzy Sugeno orde-0: 4 membership x 3 input = 64 rule. */
 #include "fuzzy_kualitas_air.h"
-#include <math.h>
-#include <stddef.h>   /* NULL */
+#include <stddef.h>
 
-/* ---------- OUTPUT CONSTANTS (SUGENO ORDER-0) ---------------- */
-#define OUT_SANGAT_LAYAK          1.00f
-#define OUT_LAYAK_SARING_RINGAN   0.75f
-#define OUT_CUKUP_PROSES_SEDANG   0.50f
-#define OUT_KRITIS_PROSES_INTENSIF 0.25f
-#define OUT_TIDAK_LOLOS           0.00f
-
-/* ---------- FUNGSI MEMBERSHIP TRAPESIUM (trapmf) ------------------------ */
-static float trapmf(float x, float a, float b, float c, float d)
-{
+static float trapmf(float x, float a, float b, float c, float d) {
     if (x < a || x > d) return 0.0f;
     if (x >= b && x <= c) return 1.0f;
     if (x < b) return (a == b) ? 1.0f : (x - a) / (b - a);
     return (c == d) ? 1.0f : (d - x) / (d - c);
 }
 
-/* ---------- FUNGSI MEMBERSHIP SEGITIGA (trimf) -------------------------- */
-static float trimf(float x, float a, float b, float c)
-{
+static float trimf(float x, float a, float b, float c) {
     if (x < a || x > c) return 0.0f;
     if (x == b) return 1.0f;
-    if (x < b) return (a == b) ? 1.0f : (x - a) / (b - a);
-    return (b == c) ? 1.0f : (c - x) / (c - b);
+    if (x < b) return (x - a) / (b - a);
+    return (c - x) / (c - b);
 }
 
-static float fmin2(float a, float b) { return (a < b) ? a : b; }
-
-/* Fungsi bantu menghitung output Z berdasarkan aturan Limiting Parameter */
-static float hitungOutput_2Input(int s1, int s2) {
-    int max_sev = (s1 > s2) ? s1 : s2;
-    int count_max = 0;
-    if (s1 == max_sev) count_max++;
-    if (s2 == max_sev) count_max++;
-
-    if (max_sev == 0) return OUT_SANGAT_LAYAK;
-    if (max_sev == 1 && count_max == 1) return OUT_LAYAK_SARING_RINGAN;
-    if (max_sev == 1 && count_max >= 2) return OUT_CUKUP_PROSES_SEDANG;
-    if (max_sev == 2 && count_max == 1) return OUT_KRITIS_PROSES_INTENSIF;
-    return OUT_TIDAK_LOLOS;
+static float outputForSeverity(uint8_t severity) {
+    static const float outputs[] = { 1.00f, 0.67f, 0.33f, 0.00f };
+    return outputs[severity > 3 ? 3 : severity];
 }
 
-static float hitungOutput_3Input(int s1, int s2, int s3) {
-    int max_sev = (s1 > s2) ? s1 : s2;
-    max_sev = (s3 > max_sev) ? s3 : max_sev;
-    
-    int count_max = 0;
-    if (s1 == max_sev) count_max++;
-    if (s2 == max_sev) count_max++;
-    if (s3 == max_sev) count_max++;
+float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* p, float tds,
+                                            float turbidity, float deltaSuhu) {
+    if (p == NULL) return 0.0f;
+    if (tds < 0.0f) tds = 0.0f; if (tds > p->tdsMax) tds = p->tdsMax;
+    if (turbidity < 0.0f) turbidity = 0.0f; if (turbidity > p->turbMax) turbidity = p->turbMax;
+    if (deltaSuhu < 0.0f) deltaSuhu = 0.0f; if (deltaSuhu > p->tempMax) deltaSuhu = p->tempMax;
 
-    if (max_sev == 0) return OUT_SANGAT_LAYAK;
-    if (max_sev == 1 && count_max == 1) return OUT_LAYAK_SARING_RINGAN;
-    if (max_sev == 1 && count_max >= 2) return OUT_CUKUP_PROSES_SEDANG;
-    if (max_sev == 2 && count_max == 1) return OUT_KRITIS_PROSES_INTENSIF;
-    return OUT_TIDAK_LOLOS;
-}
-
-/* ==========================================================================
- * 1. AIR MINUM (3 INPUT: TDS, Turb, Suhu absolut)
- * ========================================================================== */
-float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float suhu)
-{
-    if (profil == NULL) return 0.0f;
-
-    if (tds < 0.0f) tds = 0.0f;
-    if (tds > profil->tds2_max) tds = profil->tds2_max;
-    if (turbidity < 0.0f) turbidity = 0.0f;
-    if (turbidity > profil->turb2_max) turbidity = profil->turb2_max;
-    if (suhu < 0.0f) suhu = 0.0f;
-    if (suhu > profil->suhuPanas_c) suhu = profil->suhuPanas_c;
-
-    const float mfTds[3] = {
-        trapmf(tds, 0.0f, 0.0f, profil->tds0_b, profil->tds0_c),
-        trimf(tds, profil->tds1_a, profil->tds1_b, profil->tds1_c),
-        trapmf(tds, profil->tds2_a, profil->tds2_b, profil->tds2_max, profil->tds2_max)
+    const float mt[4] = {
+        trapmf(tds, 0, 0, p->tdsSl_b, p->tdsSl_c),
+        trimf(tds, p->tdsPs_a, p->tdsPs_b, p->tdsPs_c),
+        trimf(tds, p->tdsPi_a, p->tdsPi_b, p->tdsPi_c),
+        trapmf(tds, p->tdsTl_a, p->tdsTl_b, p->tdsMax, p->tdsMax)
+    };
+    const float mb[4] = {
+        trapmf(turbidity, 0, 0, p->turbSl_b, p->turbSl_c),
+        trimf(turbidity, p->turbPs_a, p->turbPs_b, p->turbPs_c),
+        trimf(turbidity, p->turbPi_a, p->turbPi_b, p->turbPi_c),
+        trapmf(turbidity, p->turbTl_a, p->turbTl_b, p->turbMax, p->turbMax)
+    };
+    const float ms[4] = {
+        trapmf(deltaSuhu, 0, 0, p->tempSl_b, p->tempSl_c),
+        trimf(deltaSuhu, p->tempPs_a, p->tempPs_b, p->tempPs_c),
+        trimf(deltaSuhu, p->tempPi_a, p->tempPi_b, p->tempPi_c),
+        trapmf(deltaSuhu, p->tempTl_a, p->tempTl_b, p->tempMax, p->tempMax)
     };
 
-    const float mfTurb[3] = {
-        trapmf(turbidity, 0.0f, 0.0f, profil->turb0_b, profil->turb0_c),
-        trimf(turbidity, profil->turb1_a, profil->turb1_b, profil->turb1_c),
-        trapmf(turbidity, profil->turb2_a, profil->turb2_b, profil->turb2_max, profil->turb2_max)
+    float weighted = 0.0f, total = 0.0f;
+    for (uint8_t s = 0; s < 4; ++s) for (uint8_t t = 0; t < 4; ++t)
+    for (uint8_t b = 0; b < 4; ++b) {
+        float w = mt[t]; if (mb[b] < w) w = mb[b]; if (ms[s] < w) w = ms[s];
+        uint8_t worst = t > b ? t : b; if (s > worst) worst = s;
+        weighted += w * outputForSeverity(worst); total += w;
+    }
+    return total > 0.0f ? weighted / total : 0.0f;
+}
+
+float FuzzyKualitasAir_HitungSkor_Higiene(const FuzzyProfil_t* p, float tds, float turbidity) {
+    return FuzzyKualitasAir_HitungSkor_AirMinum(p, tds, turbidity, 0.0f);
+}
+
+float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* p, float suhu, float turbidity) {
+    return FuzzyKualitasAir_HitungSkor_AirMinum(p, 0.0f, turbidity, suhu);
+}
+
+KualitasAir_t FuzzyKualitasAir_GetStatusProfil(const FuzzyProfil_t* p, float score) {
+    if (p == NULL) return STATUS_TIDAK_LOLOS;
+    if (score >= p->threshSangatLayak) return STATUS_SANGAT_LAYAK;
+    if (score >= p->threshProsesSedang) return STATUS_PROSES_SEDANG;
+    if (score >= p->threshProsesIntensif) return STATUS_PROSES_INTENSIF;
+    return STATUS_TIDAK_LOLOS;
+}
+
+const char* FuzzyKualitasAir_GetPesan(KualitasAir_t s) {
+    switch (s) {
+        case STATUS_SANGAT_LAYAK: return "Air Sangat Layak";
+        case STATUS_PROSES_SEDANG: return "Perlu proses sedang";
+        case STATUS_PROSES_INTENSIF: return "Perlu proses intensif";
+        default: return "Tidak layak digunakan";
+    }
+}
+
+const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t s) {
+    switch (s) {
+        case STATUS_SANGAT_LAYAK: return "S.LAYAK";
+        case STATUS_PROSES_SEDANG: return "P.SED";
+        case STATUS_PROSES_INTENSIF: return "P.INT";
+        default: return "T.LOLOS";
+    }
+}
+
+const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t s) {
+    static const char* const labels[] = { "S.Layak", "P.Sed", "P.Int", "T.Lolos" };
+    return labels[s > SUHU_TL ? SUHU_TL : s];
+}
+
+StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float d, const FuzzyProfil_t* p) {
+    if (p == NULL) return SUHU_TL;
+    const float m[4] = {
+        trapmf(d, 0, 0, p->tempSl_b, p->tempSl_c),
+        trimf(d, p->tempPs_a, p->tempPs_b, p->tempPs_c),
+        trimf(d, p->tempPi_a, p->tempPi_b, p->tempPi_c),
+        trapmf(d, p->tempTl_a, p->tempTl_b, p->tempMax, p->tempMax)
     };
-
-    /* Severity: Normal=0 (ideal), Dingin=1 (batas), Panas=2 (buruk). */
-    const float mfTemp[3] = {
-        trimf(suhu, profil->suhuNormal_a, profil->suhuNormal_b, profil->suhuNormal_c),
-        trapmf(suhu, 0.0f, 0.0f, profil->suhuDingin_b, profil->suhuDingin_c),
-        trapmf(suhu, profil->suhuPanas_a, profil->suhuPanas_b,
-               profil->suhuPanas_c, profil->suhuPanas_c)
-    };
-
-    float sum_wz = 0.0f;
-    float sum_w  = 0.0f;
-
-    for (int t = 0; t < 3; t++) {
-        if (mfTds[t] <= 0.0f) continue;
-        for (int b = 0; b < 3; b++) {
-            if (mfTurb[b] <= 0.0f) continue;
-            for (int s = 0; s < 3; s++) {
-                if (mfTemp[s] <= 0.0f) continue;
-                
-                float w = fmin2(mfTds[t], fmin2(mfTurb[b], mfTemp[s]));
-                float z = hitungOutput_3Input(t, b, s);
-                sum_wz += w * z;
-                sum_w  += w;
-            }
-        }
-    }
-
-    if (sum_w < 1e-6f) return OUT_TIDAK_LOLOS;
-    return sum_wz / sum_w;
+    uint8_t best = 0;
+    for (uint8_t i = 1; i < 4; ++i) if (m[i] >= m[best]) best = i;
+    return (StatusSuhu_t)best;
 }
 
-/* ==========================================================================
- * 2. HIGIENE SANITASI (2 INPUT: TDS, Turb)
- * ========================================================================== */
-float FuzzyKualitasAir_HitungSkor_Higiene(const FuzzyProfil_t* profil, float tds, float turbidity)
-{
-    if (profil == NULL) return 0.0f;
-
-    if (tds < 0.0f) tds = 0.0f;
-    if (tds > profil->tds2_max) tds = profil->tds2_max;
-    if (turbidity < 0.0f) turbidity = 0.0f;
-    if (turbidity > profil->turb2_max) turbidity = profil->turb2_max;
-
-    const float mfTds[3] = {
-        trapmf(tds, 0.0f, 0.0f, profil->tds0_b, profil->tds0_c),
-        trimf(tds, profil->tds1_a, profil->tds1_b, profil->tds1_c),
-        trapmf(tds, profil->tds2_a, profil->tds2_b, profil->tds2_max, profil->tds2_max)
-    };
-
-    const float mfTurb[3] = {
-        trapmf(turbidity, 0.0f, 0.0f, profil->turb0_b, profil->turb0_c),
-        trimf(turbidity, profil->turb1_a, profil->turb1_b, profil->turb1_c),
-        trapmf(turbidity, profil->turb2_a, profil->turb2_b, profil->turb2_max, profil->turb2_max)
-    };
-
-    float sum_wz = 0.0f;
-    float sum_w  = 0.0f;
-
-    for (int t = 0; t < 3; t++) {
-        if (mfTds[t] <= 0.0f) continue;
-        for (int b = 0; b < 3; b++) {
-            if (mfTurb[b] <= 0.0f) continue;
-            
-            float w = fmin2(mfTds[t], mfTurb[b]);
-            float z = hitungOutput_2Input(t, b);
-            sum_wz += w * z;
-            sum_w  += w;
-        }
-    }
-
-    if (sum_w < 1e-6f) return OUT_TIDAK_LOLOS;
-    return sum_wz / sum_w;
-}
-
-/* ==========================================================================
- * 3. PEMANDIAN UMUM (2 INPUT: Suhu, Turb) - TDS DIBYPASS
- * ========================================================================== */
-float FuzzyKualitasAir_HitungSkor_Pemandian(const FuzzyProfil_t* profil, float suhu, float turbidity)
-{
-    if (profil == NULL) return 0.0f;
-
-    if (turbidity < 0.0f) turbidity = 0.0f;
-    if (turbidity > profil->turb2_max) turbidity = profil->turb2_max;
-    if (suhu < 0.0f) suhu = 0.0f;
-    if (suhu > profil->suhuPanas_c) suhu = profil->suhuPanas_c;
-
-    const float mfTurb[3] = {
-        trapmf(turbidity, 0.0f, 0.0f, profil->turb0_b, profil->turb0_c),
-        trimf(turbidity, profil->turb1_a, profil->turb1_b, profil->turb1_c),
-        trapmf(turbidity, profil->turb2_a, profil->turb2_b, profil->turb2_max, profil->turb2_max)
-    };
-
-    const float mfTemp[3] = {
-        trimf(suhu, profil->suhuNormal_a, profil->suhuNormal_b, profil->suhuNormal_c),
-        trapmf(suhu, 0.0f, 0.0f, profil->suhuDingin_b, profil->suhuDingin_c),
-        trapmf(suhu, profil->suhuPanas_a, profil->suhuPanas_b,
-               profil->suhuPanas_c, profil->suhuPanas_c)
-    };
-
-    float sum_wz = 0.0f;
-    float sum_w  = 0.0f;
-
-    for (int b = 0; b < 3; b++) {
-        if (mfTurb[b] <= 0.0f) continue;
-        for (int s = 0; s < 3; s++) {
-            if (mfTemp[s] <= 0.0f) continue;
-            
-            float w = fmin2(mfTurb[b], mfTemp[s]);
-            float z = hitungOutput_2Input(b, s); // b=Turbidity, s=Suhu
-            sum_wz += w * z;
-            sum_w  += w;
-        }
-    }
-
-    if (sum_w < 1e-6f) return OUT_TIDAK_LOLOS;
-    return sum_wz / sum_w;
-}
-
-/* ==========================================================================
- * FUNGSI KONVERSI SKOR -> LABEL STATUS
- * ========================================================================== */
-KualitasAir_t FuzzyKualitasAir_GetStatusProfil(const FuzzyProfil_t* profil, float skor)
-{
-    if (profil == NULL) {
-        return STATUS_TIDAK_LOLOS;
-    }
-
-    if (skor >= profil->threshSangatLayak) {
-        return STATUS_SANGAT_LAYAK;
-    } else if (skor >= profil->threshLayakSaring) {
-        return STATUS_LAYAK_SARING_RINGAN;
-    } else if (skor >= profil->threshCukup) {
-        return STATUS_CUKUP_PROSES_SEDANG;
-    } else if (skor >= profil->threshKritis) {
-        return STATUS_KRITIS;
-    } else {
-        return STATUS_TIDAK_LOLOS;
-    }
-}
-
-const char* FuzzyKualitasAir_GetPesan(KualitasAir_t status)
-{
-    switch (status) {
-        case STATUS_SANGAT_LAYAK:       return "Air Sangat Layak";
-        case STATUS_LAYAK_SARING_RINGAN:return "Layak, Saring Ringan";
-        case STATUS_CUKUP_PROSES_SEDANG:return "Cukup, Perlu Olah Air";
-        case STATUS_KRITIS:             return "Kurang, Butuh Saring Total";
-        case STATUS_TIDAK_LOLOS:        return "Tidak Layak / Dilarang";
-        default:                        return "Unknown";
-    }
-}
-
-const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status)
-{
-    switch (status) {
-        case STATUS_SANGAT_LAYAK:       return "S.LAYAK";
-        case STATUS_LAYAK_SARING_RINGAN:return "LAYAK";
-        case STATUS_CUKUP_PROSES_SEDANG:return "CUKUP";
-        case STATUS_KRITIS:             return "KURANG";
-        case STATUS_TIDAK_LOLOS:        return "T.LAYAK";
-        default:                        return "UNKNOWN";
-    }
-}
-
-const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status)
-{
-    switch (status) {
-        case SUHU_NORMAL: return "Normal";
-        case SUHU_DINGIN: return "Dingin";
-        case SUHU_PANAS:  return "Panas";
-        default:              return "Unknown";
-    }
-}
-
-StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float suhu, const FuzzyProfil_t* profil)
-{
-    if (profil == NULL) return SUHU_PANAS;
-
-    float normal = trimf(suhu, profil->suhuNormal_a, profil->suhuNormal_b, profil->suhuNormal_c);
-    float dingin = trapmf(suhu, 0.0f, 0.0f, profil->suhuDingin_b, profil->suhuDingin_c);
-    float panas = trapmf(suhu, profil->suhuPanas_a, profil->suhuPanas_b,
-                         profil->suhuPanas_c, profil->suhuPanas_c);
-
-    if (normal >= dingin && normal >= panas) return SUHU_NORMAL;
-    if (dingin >= normal && dingin >= panas) return SUHU_DINGIN;
-    return SUHU_PANAS;
-}
-
-ThresholdResult_t Threshold_CekPemandianKolam(float suhu, float turbidity)
-{
-    ThresholdResult_t res;
-    // Ambang batas gabungan konservatif: Suhu 16-35 C, Turbidity < 0.5 NTU
-    res.suhuAman = (suhu >= 16.0f && suhu <= 35.0f);
-    res.turbidityAman = (turbidity < 0.5f);
-    res.semuaAman = res.suhuAman && res.turbidityAman;
-    return res;
-}
-
-float FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu_aktual)
-{
-    // Menggunakan referensi standar kompensasi 25 derajat Celsius
-    float faktor = 1.0f + 0.02f * (suhu_aktual - 25.0f);
-    if (faktor < 0.1f) faktor = 0.1f;
-    return tds_raw / faktor;
+ThresholdResult_t Threshold_CekPemandianKolam(float suhu, float turbidity) {
+    ThresholdResult_t r;
+    r.suhuAman = suhu >= 16.0f && suhu <= 35.0f;
+    r.turbidityAman = turbidity < 0.5f;
+    r.semuaAman = r.suhuAman && r.turbidityAman;
+    return r;
 }

@@ -33,15 +33,15 @@ void setup() {
     Serial.println(F("    VALIDASI AUTOMATIS FIRMWARE         "));
     Serial.println(F("========================================"));
 
-    // Test 1: Air Minum & Higiene (3 input Fuzzy) - Suhu normal 28 C
-    float s1 = FuzzyKualitasAir_HitungSkor_AirMinum(pAirMinum, 50.0f, 0.5f, 28.0f);
+    // Test 1: 3 input SL (TDS, Turbidity, Delta T).
+    float s1 = FuzzyKualitasAir_HitungSkor_AirMinum(pAirMinum, 50.0f, 0.5f, 0.5f);
     Serial.print(F("Air Minum (Ideal)     : "));
     Serial.print(s1, 2);
     Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pAirMinum, s1)));
     Serial.println(F("]"));
 
-    // Test 2: Air Minum & Higiene - TDS batas, suhu normal 28 C
-    float s2 = FuzzyKualitasAir_HitungSkor_AirMinum(pAirMinum, 280.0f, 0.5f, 28.0f);
+    // Test 2: TDS pada area proses sedang, suhu dan turbidity baik.
+    float s2 = FuzzyKualitasAir_HitungSkor_AirMinum(pAirMinum, 250.0f, 0.5f, 0.5f);
     Serial.print(F("Air Minum (1 Batas)   : "));
     Serial.print(s2, 2);
     Serial.print(F(" [")); Serial.print(FuzzyKualitasAir_GetStatusBadge(FuzzyKualitasAir_GetStatusProfil(pAirMinum, s2)));

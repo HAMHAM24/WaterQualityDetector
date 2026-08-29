@@ -8,14 +8,14 @@ Firmware berbasis Arduino/STM32 untuk alat analisis kualitas air terpadu dengan 
 
 ## 1. Deskripsi Proyek
 
-Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-parameter yang menampilkan hasil pengukuran dan evaluasi kualitas air secara *real-time* pada layar OLED 128x64. Sistem membaca data dari beberapa sensor secara periodik, melakukan kompensasi suhu terhadap pembacaan TDS, mengolah data melalui **Mesin Evaluasi Fuzzy Sugeno**, menyimpannya secara *thread-safe* di dalam struktur data global, dan menampilkannya melalui antarmuka GUI **Dual-Page View**.
+Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-parameter yang menampilkan hasil pengukuran dan evaluasi kualitas air secara *real-time* pada layar OLED 128x64. Sistem membaca data dari beberapa sensor secara periodik, melakukan kompensasi suhu terhadap pembacaan TDS, mengolah data melalui **Mesin Evaluasi Fuzzy Sugeno**, menyimpannya secara *thread-safe* di dalam struktur data global, dan menampilkannya melalui antarmuka GUI **Three-Page View**.
 
 ### Tujuan Utama Firmware:
 - Membaca suhu air menggunakan sensor digital **DS18B20** (OneWire).
 - Membaca nilai **TDS analog** dan menerapkan **kompensasi suhu** (referensi 25 °C).
 - Membaca nilai **turbidity analog** (kekeruhan air) dengan filter *Circular Moving Average* (20 sampel).
 - Menghitung **Skor Kualitas Air (0–100)** dan menetapkan label status (`LAYAK`, `LTM`, `TL`) serta pesan rekomendasi menggunakan **Fuzzy Logic Sugeno Order-0**.
-- Menampilkan hasil secara *real-time* di OLED 128x64 dengan fitur **Dual-Page View** pada layar Pengukuran.
+- Menampilkan hasil secara *real-time* di OLED 128x64 dengan fitur **Three-Page View** pada layar Pengukuran.
 - Menyediakan **Fitur Kalibrasi Sensor Interaktif** (TDS, Turbidity, Suhu) dengan penyimpanan permanen pada memori Flash EEPROM STM32.
 - Menyediakan navigasi menu yang intuitif dan aman menggunakan 6 tombol fisik.
 - Mendukung pengaturan kecerahan/kontras layar.
@@ -65,7 +65,7 @@ Proyek ini adalah firmware embedded untuk perangkat pengukur kualitas air multi-
 - `buttons.h` / `buttons.cpp` – Driver tombol dengan software debounce (30ms), hold (600ms), repeat (150ms), dan event queue.
 - `sensors.h` / `sensors.cpp` – Driver sensor DS18B20 non-blocking, pembacaan ADC, filter moving average, penerapan kalibrasi, dan pemrosesan fuzzy thread-safe.
 - `display.h` / `display.cpp` – Driver OLED SSD1306 U8g2 full frame buffer dan primitif header/status bar.
-- `gui.h` / `gui.cpp` – Antarmuka GUI berbasis Finite State Machine (FSM) dengan fitur **Dual-Page View** pada layar Pengukuran dan menu kalibrasi interaktif.
+- `gui.h` / `gui.cpp` – Antarmuka GUI berbasis Finite State Machine (FSM) dengan fitur **Three-Page View** pada layar Pengukuran dan menu kalibrasi interaktif.
 - `tasks.h` / `tasks.cpp` – Pembuatan dan penanganan 6 task FreeRTOS.
 - `kualitas_air.fis` – File ekspor konfigurasi Fuzzy Inference System dari MATLAB.
 
@@ -127,17 +127,13 @@ terhenti.
 Firmware memiliki 2 mode evaluasi utama yang disesuaikan dengan regulasi Permenkes RI No. 2 Tahun 2023:
 
 ### Mode 1: Air Minum & Higiene Sanitasi (Fuzzy Logic Sugeno Orde-0)
-Menggunakan **Fuzzy Inference System (FIS) Sugeno Orde-0** dengan **3 input, 27 aturan**, kurva trapesium (`trapmf`) dan segitiga (`trimf`):
-1. **TDS Kompensasi (ppm / mg/L)**: Ideal ($\le 250$), Batas ($150-450$), Tinggi ($>450$)
-2. **Turbidity (NTU)**: Jernih ($\le 2.5$), Sedang ($1.5-5.0$), Keruh ($\ge 6.0$)
-3. **Suhu Air (Celsius)**: Dingin ($\le 24^\circ\text{C}$), Normal ($24-32^\circ\text{C}$), Panas ($\ge 32^\circ\text{C}$)
+Menggunakan **Fuzzy Inference System (FIS) Sugeno Orde-0** dengan **3 input, 64 aturan**, kurva trapesium (`trapmf`) dan segitiga (`trimf`):
+1. **TDS terkompensasi (ppm / mg/L)**: SL `[0,0,150,225]`, PS `[150,225,300]`, PI `[225,300,450]`, TL `[300,450,600,600]`.
+2. **Turbidity (NTU)**: SL `[0,0,1.5,2.25]`, PS `[1.5,2.25,3]`, PI `[2.25,3,4.5]`, TL `[3,4.5,25,25]`.
+3. **Deviasi suhu (Celsius)**: $\Delta T=|T_{air}-T_{udara}|$, dengan SL `[0,0,1,1.5]`, PS `[1,1.75,2.5]`, PI `[2,2.75,3.5]`, TL `[3,4,10,10]`.
 
-- **Output Skor (0.00 – 1.00)** dengan 5 level status:
-  - **Skor $\ge 0.875$** $\rightarrow$ **S.LAYAK** (`"Air Sangat Layak"`)
-  - **$0.625 \le \text{Skor} < 0.875$** $\rightarrow$ **LAYAK** (`"Layak, Saring Ringan"`)
-  - **$0.375 \le \text{Skor} < 0.625$** $\rightarrow$ **CUKUP** (`"Cukup, Perlu Olah Air"`)
-  - **$0.125 \le \text{Skor} < 0.375$** $\rightarrow$ **KURANG** (`"Kurang, Butuh Saring Total"`)
-  - **Skor $< 0.125$** $\rightarrow$ **T.LAYAK** (`"Tidak Layak / Dilarang"`)
+- **Output Skor (0.00 – 1.00)**: `S.LAYAK` (>=0.83), `P.SED` (>=0.50), `P.INT` (>=0.17), atau `T.LOLOS` (<0.17).
+- Batas kepatuhan tegas: TDS >=300 ppm, Turbidity >=3 NTU, atau Delta T >3 C menghasilkan `T.LOLOS`.
 
 ---
 

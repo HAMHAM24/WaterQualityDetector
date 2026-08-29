@@ -9,22 +9,18 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include <stdint.h>
 
-/* ---------- ENUM STATUS OUTPUT KUALITAS AIR (5 LEVEL) ------------------- */
+/* ---------- ENUM STATUS OUTPUT KUALITAS AIR (4 LEVEL) ------------------- */
 typedef enum {
     STATUS_SANGAT_LAYAK = 0,    /* z = 1.00 */
-    STATUS_LAYAK_SARING_RINGAN, /* z = 0.75 */
-    STATUS_CUKUP_PROSES_SEDANG, /* z = 0.50 */
-    STATUS_KRITIS,              /* z = 0.25 */
+    STATUS_PROSES_SEDANG,       /* z = 0.67 */
+    STATUS_PROSES_INTENSIF,     /* z = 0.33 */
     STATUS_TIDAK_LOLOS          /* z = 0.00 */
 } KualitasAir_t;
 
 /* ---------- ENUM STATUS SUHU AIR (3 LEVEL) ----------------------------- */
-typedef enum {
-    SUHU_NORMAL = 0,
-    SUHU_DINGIN,
-    SUHU_PANAS
-} StatusSuhu_t;
+typedef enum { SUHU_SL = 0, SUHU_PS, SUHU_PI, SUHU_TL } StatusSuhu_t;
 
 /* ---------- STRUCT HASIL THRESHOLD CHECK PEMANDIAN / KOLAM ------------- */
 typedef struct {
@@ -36,33 +32,19 @@ typedef struct {
 /* --------------------------------------------------------------------------
  * PROFIL BAKU MUTU FUZZY
  *
- * Menggunakan pendekatan 3 Severity Level (0=Ideal, 1=Batas, 2=Buruk).
- * Untuk suhu air absolut: Normal=0, Dingin=1, Panas=2.
- *   IDEAL (0)   : trapmf [0, 0, p0_b, p0_c]
- *   BATAS (1)   : trimf  [p1_a, p1_b, p1_c]
- *   TINGGI (2)  : trapmf [p2_a, p2_b, max, max]
+ * Empat severity: SL=0, PS=1, PI=2, TL=3.
  * ------------------------------------------------------------------------ */
 typedef struct {
-    /* Parameter TDS (mg/L) */
-    float tds0_b, tds0_c;
-    float tds1_a, tds1_b, tds1_c;
-    float tds2_a, tds2_b, tds2_max;
-
-    /* Parameter Turbidity (NTU) */
-    float turb0_b, turb0_c;
-    float turb1_a, turb1_b, turb1_c;
-    float turb2_a, turb2_b, turb2_max;
-
-    /* Parameter Suhu Air Absolut (Celsius) */
-    float suhuDingin_b, suhuDingin_c;           /* trapmf [0, 0, b, c] */
-    float suhuNormal_a, suhuNormal_b, suhuNormal_c; /* trimf [a, b, c] */
-    float suhuPanas_a, suhuPanas_b, suhuPanas_c;    /* trapmf [a, b, c, c] */
-
-    /* Thresholds */
-    float threshSangatLayak;
-    float threshLayakSaring;
-    float threshCukup;
-    float threshKritis;
+    /* TDS: SL trap, PS tri, PI tri, TL trap. */
+    float tdsSl_b, tdsSl_c, tdsPs_a, tdsPs_b, tdsPs_c;
+    float tdsPi_a, tdsPi_b, tdsPi_c, tdsTl_a, tdsTl_b, tdsMax;
+    /* Turbidity: SL trap, PS tri, PI tri, TL trap. */
+    float turbSl_b, turbSl_c, turbPs_a, turbPs_b, turbPs_c;
+    float turbPi_a, turbPi_b, turbPi_c, turbTl_a, turbTl_b, turbMax;
+    /* Delta suhu: SL trap, PS tri, PI tri, TL trap. */
+    float tempSl_b, tempSl_c, tempPs_a, tempPs_b, tempPs_c;
+    float tempPi_a, tempPi_b, tempPi_c, tempTl_a, tempTl_b, tempMax;
+    float threshSangatLayak, threshProsesSedang, threshProsesIntensif;
 } FuzzyProfil_t;
 
 #ifdef __cplusplus
@@ -74,7 +56,7 @@ extern "C" {
 /**
  * @brief Menghitung skor kualitas AIR MINUM (3 input: TDS, Turb, Suhu).
  */
-float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float suhu);
+float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* profil, float tds, float turbidity, float deltaSuhu);
 
 /**
  * @brief Menghitung skor kualitas HIGIENE SANITASI (2 input: TDS, Turb).
@@ -115,7 +97,7 @@ const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status);
 const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status);
 
 float         FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu_aktual);
-StatusSuhu_t  FuzzyKualitasAir_CekStatusSuhu(float suhu, const FuzzyProfil_t* profil);
+StatusSuhu_t  FuzzyKualitasAir_CekStatusSuhu(float deltaSuhu, const FuzzyProfil_t* profil);
 
 #ifdef __cplusplus
 }
