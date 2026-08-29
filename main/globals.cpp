@@ -79,6 +79,7 @@ bool globals_init() {
     g_systemState.calibTurbidityStep = 0;
     g_systemState.calibTurbidityVClear = 0.0f;
     g_systemState.calibSaving        = false;
+    g_systemState.calibTdsError      = false;
     g_systemState.settingsBrightness = g_calibParams.displayBrightness;
     g_systemState.settingsContrast   = g_calibParams.displayContrast;
     g_systemState.settingsAdjustMode = false;

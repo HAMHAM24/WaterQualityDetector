@@ -141,6 +141,7 @@ struct SystemState {
     uint8_t calibTurbidityStep;       // 0=air jernih, 1=larutan standar
     float calibTurbidityVClear;       // kandidat titik 0 NTU, belum ditulis sebelum wizard selesai
     bool calibSaving;                 // true saat pesan "Menyimpan..." perlu tampil
+    bool calibTdsError;               // true saat OK ditekan tapi sinyal TDS terlalu lemah
 
     uint8_t settingsBrightness;       // 10-255
     uint8_t settingsContrast;         // 10-255

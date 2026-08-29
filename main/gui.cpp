@@ -509,6 +509,8 @@ static void drawCalibrationSub() {
 
             if (s_viewState.calibSaving) {
                 g_u8g2.drawStr(2, y, "Menyimpan...");
+            } else if (s_viewState.calibTdsError) {
+                g_u8g2.drawStr(2, y, "! Sinyal TDS lemah!");
             } else {
                 g_u8g2.drawStr(2, y, "UP/DN:Atur  OK:Simpan");
             }
@@ -818,6 +820,7 @@ void gui_update(const ButtonEventMsg& msg) {
                 moveCursorLocked(true, CALIBRATION_ITEM_COUNT);
             else if (isActivate && msg.id == ButtonID::OK) {
                 if (g_systemState.cursorIndex == 0) {
+                    g_systemState.calibTdsError = false;
                     transitionToLocked(MenuState::CALIBRATION_TDS);
                 } else if (g_systemState.cursorIndex == 1) {
                     transitionToLocked(MenuState::CALIBRATION_TURBIDITY);
@@ -862,8 +865,13 @@ void gui_update(const ButtonEventMsg& msg) {
                         g_calibParams.tdsKFactor = TDS_KFACTOR_MAX;
                     storage_requestSave(g_calibParams);
                     g_systemState.calibSaving = true;
+                    g_systemState.calibTdsError = false;
+                    transitionToLocked(MenuState::CALIBRATION);
+                } else {
+                    // Sinyal TDS terlalu lemah — tampilkan error, jangan pindah halaman
+                    g_systemState.calibTdsError = true;
+                    g_systemState.displayDirty = true;
                 }
-                transitionToLocked(MenuState::CALIBRATION);
             } else if (isActivate && msg.id == ButtonID::BACK) {
                 transitionToLocked(MenuState::CALIBRATION);
             }
