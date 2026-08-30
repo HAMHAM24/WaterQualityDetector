@@ -12,6 +12,7 @@
 #include "tasks.h"
 
 void setup() {
+    // Serial disiapkan lebih dahulu agar pesan kegagalan inisialisasi terlihat.
     Serial.setRx(PIN_UART_RX);
     Serial.setTx(PIN_UART_TX);
     Serial.begin(SERIAL_BAUD_RATE);
@@ -26,6 +27,7 @@ void setup() {
     display_init();
     gui_init();
 
+    // Uji cepat ini memvalidasi perhitungan fuzzy dan threshold sebelum scheduler.
     // --- TEST VALIDASI BASELINE ---
     const FuzzyProfil_t* pAirMinum = globals_getProfile(WaterParameter::AIR_MINUM_HIGIENE);
 

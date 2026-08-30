@@ -38,6 +38,7 @@ static volatile bool s_savePending = false;
  * @brief Membandingkan dua parameter kalibrasi byte per byte.
  */
 static bool paramsEqual(const CalibrationParams& a, const CalibrationParams& b) {
+    // Perbandingan byte memastikan tidak ada penulisan flash yang tidak perlu.
     return memcmp(&a, &b, sizeof(CalibrationParams)) == 0;
 }
 
@@ -123,6 +124,7 @@ void storage_clampParams(CalibrationParams& params) {
 }
 
 void storage_init() {
+    // Baca konfigurasi lama, migrasikan format bila perlu, lalu validasi nilainya.
     EEPROM.get(EEPROM_START_ADDR, g_calibParams);
 
     if (g_calibParams.magicHeader == LEGACY_MAGIC_KEY) {
@@ -167,12 +169,14 @@ void storage_init() {
 }
 
 void storage_requestSave(const CalibrationParams& params) {
+    // Simpan permintaan ke RAM; operasi flash dikerjakan oleh task sensor.
     s_pendingParams = params;
     storage_clampParams(s_pendingParams);
     s_savePending = true;
 }
 
 bool storage_processPendingSave() {
+    // Penulisan dijalankan pada titik aman agar timing sensor dan display terjaga.
     if (!s_savePending) {
         return false;
     }

@@ -78,6 +78,7 @@ static CalibrationParams  s_viewCalib;
 // HELPERS BER-MUTEX (dipanggil saat mutex sudah dipegang)
 // =============================================================================
 static void transitionToLocked(MenuState newState) {
+    // Simpan halaman sebelumnya agar tombol BACK dan alur navigasi konsisten.
     g_systemState.previousMenu = g_systemState.currentMenu;
     g_systemState.currentMenu = newState;
     g_systemState.cursorIndex = 0;
@@ -88,6 +89,7 @@ static void transitionToLocked(MenuState newState) {
 }
 
 static void moveCursorLocked(bool moveDown, uint8_t itemCount) {
+    // Cursor berputar dari item terakhir kembali ke item pertama, dan sebaliknya.
     if (moveDown) {
         g_systemState.cursorIndex = static_cast<uint8_t>(
             (g_systemState.cursorIndex + 1) % itemCount);
@@ -104,6 +106,7 @@ static void moveCursorLocked(bool moveDown, uint8_t itemCount) {
 // =============================================================================
 
 static uint8_t centeredX(const char* text) {
+    // Hitung posisi horizontal agar teks berada di tengah layar OLED.
     uint8_t textWidth = g_u8g2.getStrWidth(text);
     if (textWidth >= DISPLAY_WIDTH) return 0;
     return static_cast<uint8_t>((DISPLAY_WIDTH - textWidth) / 2);
@@ -112,6 +115,7 @@ static uint8_t centeredX(const char* text) {
 /** @brief Viewport daftar menu: 4 baris muat penuh tanpa desak-desakan. */
 static void drawSimpleList(const char* title, const char* const* items,
                             uint8_t count, uint8_t cursor) {
+    // Render menu dan geser viewport bila posisi cursor melewati layar.
     display_drawHeader(title);
     g_u8g2.setFont(u8g2_font_6x10_tf);
 
@@ -172,6 +176,7 @@ static void drawHome() {
 
 /** @brief Screen Tunggu / Stabilisasi Pembacaan Sensor (5 Detik) */
 static void drawWaitingSampling() {
+    // Halaman ini memberi waktu sensor menstabilkan pembacaan sebelum hasil tampil.
     const char* modeTitle = (s_viewState.activeParameter == WaterParameter::AIR_MINUM_HIGIENE)
                                 ? "MODE: AIR MINUM"
                                 : "MODE: PEMANDIAN";
@@ -267,6 +272,7 @@ static const char* severityLabel(uint8_t severity, const char* ideal,
 
 /** @brief Dashboard, diagnosis, dan saran spesifik (Three-Page View). */
 static void drawMeasurement() {
+    // Tampilkan ringkasan kualitas air berdasarkan snapshot data sensor.
     if (s_viewState.activeParameter == WaterParameter::PEMANDIAN_KOLAM) {
         // =====================================================================
         // MODE 2: PEMANDIAN / KOLAM — EVALUASI THRESHOLD CHECKER (NON-FUZZY)
@@ -499,6 +505,7 @@ static void drawMeasurement() {
 }
 
 static void drawCalibration() {
+    // Pilih tampilan kalibrasi sesuai submenu yang sedang aktif.
     drawSimpleList("Kalibrasi Sensor", CALIBRATION_ITEMS, CALIBRATION_ITEM_COUNT,
                    s_viewState.cursorIndex);
     if (s_viewState.calibSaving) {
