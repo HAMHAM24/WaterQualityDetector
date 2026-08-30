@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 static float trapmf(float x, float a, float b, float c, float d) {
+    /* Fungsi keanggotaan trapesium: nilai naik, datar di 1, lalu turun. */
     if (x < a || x > d) return 0.0f;
     if (x >= b && x <= c) return 1.0f;
     if (x < b) return (a == b) ? 1.0f : (x - a) / (b - a);
@@ -10,6 +11,7 @@ static float trapmf(float x, float a, float b, float c, float d) {
 }
 
 static float trimf(float x, float a, float b, float c) {
+    /* Fungsi keanggotaan segitiga dengan puncak keanggotaan pada titik b. */
     if (x < a || x > c) return 0.0f;
     if (x == b) return 1.0f;
     if (x < b) return (x - a) / (b - a);
@@ -17,6 +19,7 @@ static float trimf(float x, float a, float b, float c) {
 }
 
 static float outputForSeverity(uint8_t severity) {
+    /* Output singleton Sugeno untuk empat tingkat keparahan kualitas air. */
     static const float outputs[] = { 1.00f, 0.67f, 0.33f, 0.00f };
     return outputs[severity > 3 ? 3 : severity];
 }
@@ -24,10 +27,12 @@ static float outputForSeverity(uint8_t severity) {
 float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* p, float tds,
                                             float turbidity, float deltaSuhu) {
     if (p == NULL) return 0.0f;
+    /* Batasi input agar selalu berada di dalam rentang profil fuzzy. */
     if (tds < 0.0f) tds = 0.0f; if (tds > p->tdsMax) tds = p->tdsMax;
     if (turbidity < 0.0f) turbidity = 0.0f; if (turbidity > p->turbMax) turbidity = p->turbMax;
     if (deltaSuhu < 0.0f) deltaSuhu = 0.0f; if (deltaSuhu > p->tempMax) deltaSuhu = p->tempMax;
 
+    /* Hitung derajat keanggotaan masing-masing input pada empat kategori. */
     const float mt[4] = {
         trapmf(tds, 0, 0, p->tdsSl_b, p->tdsSl_c),
         trimf(tds, p->tdsPs_a, p->tdsPs_b, p->tdsPs_c),
@@ -47,13 +52,17 @@ float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* p, float tds,
         trapmf(deltaSuhu, p->tempTl_a, p->tempTl_b, p->tempMax, p->tempMax)
     };
 
+    /* Agregasikan 64 rule dengan operator MIN dan metode weighted average. */
     float weighted = 0.0f, total = 0.0f;
     for (uint8_t s = 0; s < 4; ++s) for (uint8_t t = 0; t < 4; ++t)
     for (uint8_t b = 0; b < 4; ++b) {
+        /* Kekuatan rule ditentukan oleh derajat keanggotaan terendah. */
         float w = mt[t]; if (mb[b] < w) w = mb[b]; if (ms[s] < w) w = ms[s];
+        /* Parameter dengan severity tertinggi menjadi pembatas hasil rule. */
         uint8_t worst = t > b ? t : b; if (s > worst) worst = s;
         weighted += w * outputForSeverity(worst); total += w;
     }
+    /* Hindari pembagian nol jika tidak ada rule yang aktif. */
     return total > 0.0f ? weighted / total : 0.0f;
 }
 
@@ -111,6 +120,7 @@ StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float d, const FuzzyProfil_t* p) {
 
 ThresholdResult_t Threshold_CekPemandianKolam(float suhu, float turbidity) {
     ThresholdResult_t r;
+    /* Mode pemandian memakai pemeriksaan ambang langsung, bukan fuzzy. */
     r.suhuAman = suhu >= 16.0f && suhu <= 35.0f;
     r.turbidityAman = turbidity < 0.5f;
     r.semuaAman = r.suhuAman && r.turbidityAman;
