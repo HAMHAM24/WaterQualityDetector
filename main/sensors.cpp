@@ -50,6 +50,7 @@ static uint32_t s_turbiditySampleSum    = 0;
 static float pushSampleAndAverage(uint16_t* buffer, uint8_t& index,
                                    uint8_t& filledCount, uint32_t& sum,
                                    uint16_t newSample) {
+    // Sampel baru menggantikan sampel tertua agar ukuran buffer tetap konstan.
     if (filledCount == FILTER_SAMPLE_COUNT) {
         // Buffer penuh: kurangi kontribusi sampel paling lama sebelum ditimpa
         sum -= buffer[index];
@@ -68,6 +69,7 @@ static float pushSampleAndAverage(uint16_t* buffer, uint8_t& index,
  * @brief Inisialisasi seluruh perangkat keras sensor.
  */
 void sensors_init() {
+    // Siapkan ADC dan sensor suhu sebelum task sensor mulai berjalan.
     analogReadResolution(ADC_RESOLUTION_BITS);
 
     s_dallasSensors.begin();
@@ -91,6 +93,7 @@ void sensors_init() {
  * @brief Memulai konversi suhu DS18B20 tanpa memblokir task lain.
  */
 void sensors_requestTemperature() {
+    // Mulai konversi terlebih dahulu; hasil dibaca setelah waktu konversi cukup.
     if (s_tempSensorFound) {
         s_dallasSensors.requestTemperatures();
     }
@@ -100,6 +103,7 @@ void sensors_requestTemperature() {
  * @brief Membaca hasil konversi suhu DS18B20 dan memperbarui g_sensorData.
  */
 void sensors_readTemperature() {
+    // Hasil pembacaan divalidasi sebelum disimpan ke data global.
     float temperatureC = DEVICE_DISCONNECTED_C;
     SensorStatus status = SensorStatus::ERROR;
 
@@ -140,10 +144,12 @@ uint16_t sensors_readTDSRaw() {
 }
 
 float sensors_adcToVoltage(float raw, float divider) {
+    // Kode ADC dikonversi ke tegangan pin, lalu dikoreksi dengan pembagi tegangan.
     return (raw / static_cast<float>(ADC_MAX_VALUE)) * ADC_REFERENCE_VOLTAGE * divider;
 }
 
 float sensors_voltageToTds(float voltage, float temperature) {
+    // Kompensasi suhu dilakukan sebelum polinomial sensor TDS diterapkan.
     if (voltage <= 0.0f) {
         return 0.0f;
     }
@@ -177,6 +183,7 @@ float sensors_voltageToTds(float voltage, float temperature) {
  * @brief Mengambil sampel TDS, memperbarui filter, dan menyimpan hasil.
  */
 void sensors_updateTDS() {
+    // Moving average mengurangi noise ADC sebelum nilai diubah menjadi ppm.
     const uint16_t raw = sensors_readTDSRaw();
     const float filteredRaw = pushSampleAndAverage(s_tdsSampleBuffer, s_tdsSampleIndex,
                                                     s_tdsSampleFilled, s_tdsSampleSum, raw);
@@ -217,6 +224,7 @@ uint16_t sensors_readTurbidityRaw() {
 }
 
 float sensors_voltageToNtu(float voltage) {
+    // Tegangan air jernih dipakai sebagai acuan untuk menghitung NTU relatif.
     // Dua titik: 0 NTU (Vclear) dan larutan standar custom (Vstandard).
     // Bila titik kedua belum sah, gunakan slope legacy agar alat tetap bekerja.
     float slope = TURBIDITY_NTU_PER_VOLT;
@@ -243,6 +251,7 @@ float sensors_voltageToNtu(float voltage) {
  * @brief Mengambil sampel turbidity, memperbarui filter, dan menyimpan hasil.
  */
 void sensors_updateTurbidity() {
+    // Filter membuat perubahan pembacaan kekeruhan lebih stabil.
     const uint16_t raw = sensors_readTurbidityRaw();
     const float filteredRaw = pushSampleAndAverage(s_turbiditySampleBuffer, s_turbiditySampleIndex,
                                                     s_turbiditySampleFilled, s_turbiditySampleSum, raw);
@@ -267,6 +276,7 @@ void sensors_updateTurbidity() {
  *        peruntukan air yang sedang aktif.
  */
 void sensors_processFuzzy() {
+    // Gunakan snapshot input agar seluruh perhitungan memakai data satu siklus.
     float tempSnapshot = TDS_TEMP_REFERENCE;
     float tdsSnapshot = 0.0f;
     float turbSnapshot = 0.0f;
