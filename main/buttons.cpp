@@ -29,6 +29,7 @@ struct ButtonRuntime {
 static ButtonRuntime s_buttons[static_cast<uint8_t>(ButtonID::COUNT)];
 
 static const char* buttonName(ButtonID id) {
+    // Nama tombol ini digunakan untuk keluaran debug melalui Serial.
     switch (id) {
         case ButtonID::UP:    return "UP";
         case ButtonID::DOWN:  return "DOWN";
@@ -57,6 +58,7 @@ static const char* pinName(ButtonID id) {
  *        ringkas untuk keperluan debug.
  */
 static void emitEvent(ButtonID id, ButtonEvent event) {
+    // Queue memisahkan driver tombol dari task GUI.
     // --- REAL-TIME BUTTON SERIAL DEBUG LOGGER ---
     if (event == ButtonEvent::PRESSED) {
         Serial.print(F(">>> [BTN PRESS]   "));
@@ -89,6 +91,7 @@ static void emitEvent(ButtonID id, ButtonEvent event) {
  * @brief Inisialisasi GPIO seluruh tombol.
  */
 void buttons_init() {
+    // INPUT_PULLUP berarti kondisi idle HIGH dan tombol ditekan LOW.
     const uint8_t pins[static_cast<uint8_t>(ButtonID::COUNT)] = {
         PIN_BTN_UP, PIN_BTN_DOWN, PIN_BTN_LEFT, PIN_BTN_RIGHT, PIN_BTN_OK, PIN_BTN_BACK
     };
@@ -111,6 +114,7 @@ void buttons_init() {
  *        menghasilkan event PRESSED/RELEASED/HOLD/REPEAT bila relevan.
  */
 void buttons_update() {
+    // Debounce diproses independen untuk setiap tombol.
     const uint32_t now = millis();
 
     for (uint8_t i = 0; i < static_cast<uint8_t>(ButtonID::COUNT); i++) {

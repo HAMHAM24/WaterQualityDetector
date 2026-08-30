@@ -20,6 +20,9 @@ static const char* const s_taskNames[6] = {
     "Btn", "Temp", "Water", "Gui", "Oled", "Debug"
 };
 
+// Setiap task menangani satu pekerjaan periodik agar pembacaan sensor,
+// pemrosesan GUI, dan penggambaran OLED tidak saling memblokir.
+
 // =============================================================================
 // TASK BUTTON — scan + debounce, periode 15 ms, prioritas tinggi
 // =============================================================================
@@ -28,6 +31,7 @@ static void taskButton(void* /* pvParameters */) {
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_BUTTON_MS);
 
     for (;;) {
+        // Scan rutin menjaga debounce tetap berjalan walau tidak ada input.
         buttons_update();
         vTaskDelayUntil(&lastWakeTime, period);
     }
@@ -42,6 +46,7 @@ static void taskTemperature(void* pvParameters) {
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_TEMPERATURE_MS);
 
     for (;;) {
+        // Request dan read dipisahkan agar DS18B20 memiliki waktu konversi.
         sensors_requestTemperature();
         vTaskDelay(pdMS_TO_TICKS(DS18B20_CONVERSION_MS));
         sensors_readTemperature();
@@ -89,6 +94,7 @@ static void taskWaterSensor(void* /* pvParameters */) {
             }
         }
 
+        // Setelah penyimpanan aman, perbarui sensor analog dan hitung hasil.
         sensors_updateTDS();
         sensors_updateTurbidity();
         sensors_processFuzzy();
@@ -107,6 +113,7 @@ static void taskGui(void* /* pvParameters */) {
     ButtonEventMsg msg;
 
     for (;;) {
+        // Task GUI memproses event dan state, sedangkan penggambaran dilakukan task OLED.
         gui_tick();
 
         while (xQueueReceive(g_buttonEventQueue, &msg, 0) == pdTRUE) {
@@ -125,6 +132,7 @@ static void taskOled(void* /* pvParameters */) {
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_OLED_MS);
 
     for (;;) {
+        // Hanya gambar ulang ketika ada perubahan untuk mengurangi transaksi I2C.
         bool needRedraw = false;
 
         if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
@@ -240,6 +248,7 @@ static void taskSerialDebug(void* /* pvParameters */) {
 bool tasks_createAll() {
     BaseType_t rc;
 
+    // Task dibuat berurutan; kegagalan alokasi langsung dilaporkan ke pemanggil.
     rc = xTaskCreate(taskButton, "TaskButton", STACK_SIZE_BUTTON, nullptr,
                      TASK_PRIORITY_BUTTON, &s_handles[0]);
     if (rc != pdPASS) return false;
