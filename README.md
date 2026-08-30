@@ -386,10 +386,10 @@ Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\l
 |                                                   |
 |   Membaca Sensor...                               |
 |   [||||||||||||||||||................]            |
-|                       60%                         |
-|   Stabil: 2/3                                     |
+|   Stabil: 2/3                             60%     |
+|                                                   |
 |---------------------------------------------------|
-| Tunggu stabil...                       BACK:Batal |
+| Tunggu stabil.                         BACK:Batal |
 +---------------------------------------------------+
 ```
 
@@ -501,21 +501,109 @@ Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\l
 
 ---
 
-### 9.7. Sub-Menu Kalibrasi Sensor & Halaman Wizard
+### 9.7. Menu Kalibrasi Sensor, Sub-Menu, & Live Monitor
 
-**Daftar Menu Kalibrasi:**
+Sistem memisahkan secara tegas antara **Live Monitor** dan **Kalibrasi**:
+- **Live Monitor**: Digunakan untuk mengecek sinyal sensor mentah (*raw data*) secara real-time sebelum proses kalibrasi atau konversi matematika (`ADC`, `Volt`, `Raw`, `Offset`, `Status`). Halaman ini tidak menampilkan nilai hasil konversi (ppm / NTU) karena pembacaan belum tentu valid sebelum kalibrasi selesai.
+- **Kalibrasi**: Memakai larutan acuan untuk menghitung rumus/faktor konversi baru dan menyimpannya secara permanen ke Flash EEPROM.
+
+#### Glosarium & Arti Singkatan:
+- **`ADC`** : *Analog-to-Digital Converter* (nilai digital mentah 12-bit ADC STM32, rentang 0–4095).
+- **`Volt`** : Tegangan sensor hasil konversi ADC (0.00–3.30 V).
+- **`Raw`** : Pembacaan sensor mentah sebelum kompensasi suhu atau offset kalibrasi.
+- **`Offset`** : Koreksi suhu (°C) yang ditambahkan ke pembacaan mentah DS18B20.
+- **`TDS`** : *Total Dissolved Solids* (kandungan zat padat terlarut).
+- **`Turb`** : *Turbidity* (kekeruhan cairan).
+- **`ppm`** : *Parts per million* (satuan konsentrasi TDS, setara mg/L).
+- **`NTU`** : *Nephelometric Turbidity Unit* (satuan kekeruhan air).
+- **`V0`** : Tegangan keluaran sensor kekeruhan pada air jernih / 0 NTU ($V_{\text{jernih}}$).
+- **`VStd`** : Tegangan keluaran sensor kekeruhan pada larutan standar ($V_{\text{standar}}$).
+- **`Std`** : Nilai kekeruhan acuan larutan standar custom (NTU).
+- **`dT`** : Deviasi/selisih suhu ($|\text{Suhu Air} - \text{Suhu Udara}|$).
+- **`SL`** : Sangat Layak (kategori mutu air tertinggi).
+- **`PS`** : Perlu Proses Sedang.
+- **`PI`** : Perlu Proses Intensif.
+- **`TL`** : Tidak Lolos (tidak memenuhi standar regulasi).
+
+---
+
+#### A. Struktur Menu Utama Kalibrasi Sensor
 ```text
 +---------------------------------------------------+
 | Kalibrasi Sensor                                  |
 |---------------------------------------------------|
-| > Kalibrasi TDS                                   |
-|   Kalibrasi Turbidity                             |
-|   Kalibrasi Suhu                                  |
+| > TDS                                             |
+|   Turbidity                                       |
+|   Suhu                                            |
 |   Reset Pabrik                                    |
 |---------------------------------------------------|
 | OK:Pilih                                BACK:Menu |
 +---------------------------------------------------+
 ```
+
+#### B. Sub-Menu Tiap Sensor (TDS / Turbidity / Suhu)
+Setiap parameter sensor memiliki sub-menu tersendiri:
+```text
++---------------------------------------------------+
+| TDS / Turbidity / Suhu                            |
+|---------------------------------------------------|
+| > Kalibrasi                                       |
+|   Live Monitor                                    |
+|                                                   |
+|---------------------------------------------------|
+| OK:Pilih                                BACK:Menu |
++---------------------------------------------------+
+```
+
+---
+
+#### C. Halaman Live Monitor Raw Data (1 Layar Murni)
+
+**1. Live Monitor TDS:**
+```text
++---------------------------------------------------+
+| Live TDS                                          |
+|---------------------------------------------------|
+| ADC   : 1245                                      |
+| Volt  : 1.00 V                                    |
+| Suhu  : 27.5 C                                    |
+| Status: OK                                        |
+|---------------------------------------------------|
+|                                         BACK:Menu |
++---------------------------------------------------+
+```
+
+**2. Live Monitor Turbidity:**
+```text
++---------------------------------------------------+
+| Live Turb                                         |
+|---------------------------------------------------|
+| ADC   : 3210                                      |
+| Volt  : 2.59 V                                    |
+| Suhu  : 27.5 C                                    |
+| Status: OK                                        |
+|---------------------------------------------------|
+|                                         BACK:Menu |
++---------------------------------------------------+
+```
+
+**3. Live Monitor Suhu:**
+```text
++---------------------------------------------------+
+| Live Suhu                                         |
+|---------------------------------------------------|
+| Raw   : 27.4 C                                    |
+| Offset: +0.1 C                                    |
+| Air   : 27.5 C                                    |
+| Status: OK                                        |
+|---------------------------------------------------|
+|                                         BACK:Menu |
++---------------------------------------------------+
+```
+
+---
+
+#### D. Halaman Wizard Kalibrasi Interaktif
 
 **1. Kalibrasi TDS ($\pm 1\text{ ppm}$ step):**
 ```text
@@ -532,6 +620,7 @@ Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\l
 ```
 
 **2. Kalibrasi Turbidity 2-Titik Wizard ($\pm 5\text{ NTU}$ custom step):**
+*Langkah 1 (Air Jernih 0 NTU):*
 ```text
 +---------------------------------------------------+
 | Turbidity (1/2)                                   |
@@ -543,6 +632,7 @@ Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\l
 | Air jernih 0 NTU                       BACK:Batal |
 +---------------------------------------------------+
 ```
+*Langkah 2 (Larutan Standar Custom):*
 ```text
 +---------------------------------------------------+
 | Turbidity (2/2)                                   |
@@ -670,25 +760,27 @@ Turb 2 titik (2.50V): 50.0 NTU
 
 ## 11. Panduan Kalibrasi Sensor
 
+*Tips: Anda dapat memeriksa sinyal sensor terlebih dahulu melalui **Live Monitor** sebelum melakukan kalibrasi.*
+
 ### A. Kalibrasi Suhu (DS18B20 Offset) — Lakukan Pertama
 1. Tempatkan probe DS18B20 bersama termometer laboratorium presisi di dalam wadah air yang sama.
-2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Suhu**.
+2. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Suhu** $\rightarrow$ **Kalibrasi**.
 3. Bandingkan nilai **Suhu Raw** pada layar dengan termometer acuan.
-4. Tekan tombol `LEFT` atau `RIGHT` untuk menyelaraskan nilai **Offset** ($\pm 0.1^\circ\text{C}$).
+4. Tekan tombol `LEFT` atau `RIGHT` (atau `UP`/`DOWN`) untuk menyelaraskan nilai **Offset** ($\pm 0.1^\circ\text{C}$).
 5. Tekan tombol **OK** untuk menyimpan nilai offset ke Flash EEPROM.
 
 ### B. Kalibrasi TDS (1-Point Solution)
 1. Siapkan larutan standar TDS acuan (misal **707 ppm**).
 2. Celupkan probe TDS ke dalam larutan dan tunggu pembacaan stabil.
-3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi TDS**.
+3. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **TDS** $\rightarrow$ **Kalibrasi**.
 4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`) dengan ketelitian **$\pm 1\text{ ppm}$**.
 5. Tekan tombol **OK** untuk menghitung $K$-Factor baru dan menyimpannya ke Flash EEPROM.
 
 ### C. Kalibrasi Turbidity (2-Point Custom Wizard)
-1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Kalibrasi Turbidity**.
+1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Turbidity** $\rightarrow$ **Kalibrasi**.
 2. **Titik 1 (0 NTU)**: Celupkan sensor ke air aquades murni. Amati nilai voltase hingga stabil, lalu tekan **OK**.
-3. **Titik 2 (Standar Custom)**: Celupkan sensor ke larutan standar (misal **100 NTU** atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka standar di layar dengan larutan yang dipakai (kenaikan **$\pm 5\text{ NTU}$**).
-4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor, dan menyimpannya ke Flash EEPROM.
+3. **Titik 2 (Standar Custom)**: Bilas sensor, lalu celupkan ke satu larutan standar yang dimiliki (misal **100 NTU**, **500 NTU**, atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka `Std` di layar dengan label nilai larutan (kenaikan **$\pm 5\text{ NTU}$**).
+4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor ($\text{Slope} = \frac{\text{Std}}{V_0 - V_{\text{Std}}}$), dan menyimpannya ke Flash EEPROM.
 
 ---
 
