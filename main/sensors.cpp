@@ -220,12 +220,17 @@ float sensors_voltageToNtu(float voltage) {
     // Dua titik: 0 NTU (Vclear) dan larutan standar custom (Vstandard).
     // Bila titik kedua belum sah, gunakan slope legacy agar alat tetap bekerja.
     float slope = TURBIDITY_NTU_PER_VOLT;
-    const float deltaV = g_calibParams.turbidityVClear - g_calibParams.turbidityVStandard;
+    const float deltaV = g_calibParams.turbidityVStandard - g_calibParams.turbidityVClear;
     if (g_calibParams.turbidityVStandard > 0.0f &&
-        deltaV >= TURBIDITY_MIN_CALIBRATION_DELTA_V) {
+        fabsf(deltaV) >= TURBIDITY_MIN_CALIBRATION_DELTA_V) {
         slope = g_calibParams.turbidityNtuStandard / deltaV;
+        float ntu = (voltage - g_calibParams.turbidityVClear) * slope;
+        if (ntu < 0.0f) ntu = 0.0f;
+        if (ntu > 3000.0f) ntu = 3000.0f;
+        return ntu;
     }
 
+    // Pertahankan kurva fallback lama sampai kalibrasi dua titik berhasil dilakukan.
     float ntu = (g_calibParams.turbidityVClear - voltage) * slope;
 
     if (ntu < 0.0f) ntu = 0.0f;
