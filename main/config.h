@@ -9,7 +9,7 @@
 // INFORMASI FIRMWARE / HARDWARE
 // =============================================================================
 constexpr const char* FIRMWARE_NAME     = "Water Quality Analyzer";
-constexpr const char* FIRMWARE_VERSION  = "2.1.0";
+constexpr const char* FIRMWARE_VERSION  = "1.0.0";
 constexpr const char* HARDWARE_VERSION  = "Rev-A (Blackpill F401CCU6)";
 constexpr const char* MCU_NAME          = "STM32F401CCU6";
 constexpr const char* DISPLAY_NAME      = "OLED 1.3\" SH1106";
