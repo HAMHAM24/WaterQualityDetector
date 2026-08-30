@@ -28,7 +28,7 @@ static const char* const HOME_ITEMS[] = {
     "Air Minum & Higiene",
     "Pemandian / Kolam",
     "Kalibrasi Sensor",
-    "Pengaturan OLED"
+    "Pengaturan"
 };
 static constexpr uint8_t HOME_ITEM_COUNT = 4;
 
@@ -744,7 +744,7 @@ static void drawCalibrationSub() {
 }
 
 static void drawSettings() {
-    display_drawHeader("Pengaturan OLED");
+    display_drawHeader("Pengaturan");
     g_u8g2.setFont(u8g2_font_6x10_tf);
 
     char valueBuf[8];
