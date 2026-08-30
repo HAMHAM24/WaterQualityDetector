@@ -335,7 +335,7 @@ Layout layar dibagi menjadi 3 zona: **Header (12 px)**, **Konten Utama (44 px)**
 |                   Physic Water                    |
 |                  Quality Index                    |
 |                       FBN                         |
-|                      v2.1.0                       |
+|                      v1.0.0                       |
 |                                                   |
 +---------------------------------------------------+
 ```
@@ -350,7 +350,7 @@ Layout layar dibagi menjadi 3 zona: **Header (12 px)**, **Konten Utama (44 px)**
 | > Air Minum & Higiene                             |
 |   Pemandian / Kolam                               |
 |   Kalibrasi Sensor                                |
-|   Pengaturan OLED                                 |
+|   Pengaturan                                 |
 |---------------------------------------------------|
 | UP/DN:Pilih                              OK:Masuk |
 +---------------------------------------------------+
@@ -676,12 +676,12 @@ Setiap parameter sensor memiliki sub-menu tersendiri:
 
 ---
 
-### 9.8. Menu Pengaturan OLED (Tersimpan Permanen di EEPROM)
+### 9.8. Menu Pengaturan (Tersimpan Permanen di EEPROM)
 
-**Daftar Pengaturan OLED:**
+**Daftar Pengaturan:**
 ```text
 +---------------------------------------------------+
-| Pengaturan OLED                                   |
+| Pengaturan                                   |
 |---------------------------------------------------|
 | > Brightness                           200        |
 |   Kontras                              128        |
@@ -695,7 +695,7 @@ Setiap parameter sensor memiliki sub-menu tersendiri:
 **Mode Edit Nilai Kecerahan/Kontras (`*`):**
 ```text
 +---------------------------------------------------+
-| Pengaturan OLED                                   |
+| Pengaturan                                   |
 |---------------------------------------------------|
 | * Brightness                           215        |
 |   Kontras                              128        |
@@ -716,7 +716,7 @@ Setiap parameter sensor memiliki sub-menu tersendiri:
 | Tentang (1/2)                                     |
 |---------------------------------------------------|
 | Alat: WQ Analyzer                                 |
-| FW  : v2.1.0                                      |
+| FW  : v1.0.0                                      |
 | Reg : Permenkes 2023                              |
 | RTOS: FreeRTOS Aktif                              |
 |---------------------------------------------------|
