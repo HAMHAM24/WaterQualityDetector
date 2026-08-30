@@ -65,13 +65,28 @@ enum class MenuState : uint8_t {
     WAITING_SAMPLING,
     MEASUREMENT,
     CALIBRATION,
-    CALIBRATION_TDS,
-    CALIBRATION_TURBIDITY,
-    CALIBRATION_TEMPERATURE,
+    CALIBRATION_TDS_MENU,
+    CALIBRATION_TDS_WIZARD,
+    TDS_MONITOR,
+    CALIBRATION_TURBIDITY_MENU,    // sub-menu: Kalibrasi / Live Monitor
+    CALIBRATION_TURBIDITY_WIZARD,  // wizard 2 langkah kalibrasi turbidity
+    TURBIDITY_MONITOR,             // live monitor raw data turbidity
+    CALIBRATION_TEMPERATURE_MENU,
+    CALIBRATION_TEMPERATURE_WIZARD,
+    TEMPERATURE_MONITOR,
     SETTINGS,
     ABOUT,
     FACTORY_RESET_CONFIRM,
     COUNT   // jumlah total state, dipakai untuk ukuran dispatch table
+};
+
+enum class TurbidityCalibrationFeedback : uint8_t {
+    NONE = 0,
+    SENSOR_ERROR,
+    VOLTAGE_TOO_LOW,
+    DELTA_V_TOO_SMALL,
+    SAVING,
+    SUCCESS
 };
 
 // =============================================================================
@@ -142,6 +157,8 @@ struct SystemState {
     float calibTurbidityVClear;       // kandidat titik 0 NTU, belum ditulis sebelum wizard selesai
     bool calibSaving;                 // true saat pesan "Menyimpan..." perlu tampil
     bool calibTdsError;               // true saat OK ditekan tapi sinyal TDS terlalu lemah
+    TurbidityCalibrationFeedback turbidityCalibFeedback;
+    uint32_t turbidityCalibSuccessTick; // waktu mulai pesan sukses kalibrasi
 
     uint8_t settingsBrightness;       // 10-255
     uint8_t settingsContrast;         // 10-255
