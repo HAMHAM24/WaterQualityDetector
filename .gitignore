@@ -1,1 +1,6 @@
 /Note/
+Note/
+*.log
+*.tmp
+.vscode/
+.idea/
