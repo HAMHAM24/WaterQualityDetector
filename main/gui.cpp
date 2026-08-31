@@ -20,6 +20,7 @@
 #include "storage.h"
 #include <STM32FreeRTOS.h>
 #include <stdio.h>
+#include <math.h>
 
 // =============================================================================
 // KONSTANTA DAFTAR MENU (4 ITEM UTAMA)
@@ -60,6 +61,7 @@ static constexpr uint8_t SETTINGS_IDX_RESET      = 2;
 static constexpr uint8_t SETTINGS_IDX_INFO       = 3;
 
 // Pewaktu berbasis milidetik sejak boot
+static uint32_t s_bootAnimStartTick = 0;
 static uint32_t s_splashStartTick   = 0;
 static uint32_t s_samplingStartTick = 0;
 static uint32_t s_stabilitySampleTick = 0;
@@ -148,6 +150,227 @@ static void drawSimpleList(const char* title, const char* const* items,
     }
     if (count > firstVisible + MENU_VISIBLE_ROWS) {
         g_u8g2.drawStr(121, MENU_LAST_LINE_Y, "v");
+    }
+}
+
+/**
+ * @brief Animasi pembuka (Boot Animation) bertema air berdurasi 5 detik.
+ *        Alur Visual:
+ *          1. 0.0s - 1.3s: Droplet forming at top nozzle & free-falling with gravity.
+ *          2. 1.3s - 2.6s: Impact splash particles + concentric expanding ripples + rebound drop.
+ *          3. 2.6s - 4.7s: Dual flowing sine waves rising up to fill tank + floating rising bubbles.
+ *          4. 4.7s - 5.0s: Calming wave settle transition into Splash Screen.
+ */
+static void drawBootAnimation() {
+    uint32_t elapsed = millis() - s_bootAnimStartTick;
+    if (elapsed > BOOT_ANIMATION_MS) {
+        elapsed = BOOT_ANIMATION_MS;
+    }
+
+    if (elapsed < 1300) {
+        // -------------------------------------------------------------
+        // FASE 1: TETESAN AIR JATUH (0 - 1300 ms)
+        // -------------------------------------------------------------
+        // Nozzle / titik tetesan di atas tengah
+        g_u8g2.drawHLine(61, 0, 7);
+        g_u8g2.drawHLine(62, 1, 5);
+        g_u8g2.drawHLine(63, 2, 3);
+
+        float dropY = 4.0f;
+        uint8_t dropRadius = 2;
+
+        if (elapsed < 300) {
+            // Tetesan membesar di nozzle
+            float formP = static_cast<float>(elapsed) / 300.0f;
+            dropRadius = (formP < 0.5f) ? 1 : 2;
+            dropY = 4.0f + formP * 2.0f;
+            g_u8g2.drawDisc(64, static_cast<uint8_t>(dropY), dropRadius);
+        } else {
+            // Tetesan jatuh bebas (akselerasi gravitasi kuadratik)
+            float t = static_cast<float>(elapsed - 300) / 1000.0f;
+            if (t > 1.0f) t = 1.0f;
+            dropY = 6.0f + 42.0f * (t * t); // dari Y=6 ke Y=48
+            uint8_t iy = static_cast<uint8_t>(dropY);
+
+            // Bentuk teardrop: disc bulat + segitiga runcing ke atas
+            g_u8g2.drawDisc(64, iy, 3);
+            if (iy >= 7) {
+                g_u8g2.drawTriangle(62, iy - 1, 66, iy - 1, 64, iy - 6);
+            }
+            // Pantulan kilau cahaya (shine highlight) di dalam tetesan
+            g_u8g2.setDrawColor(0);
+            g_u8g2.drawPixel(63, iy - 1);
+            g_u8g2.setDrawColor(1);
+        }
+
+        // Permukaan air di dasar (garis tenang dengan batas halus)
+        g_u8g2.drawHLine(20, 48, 88);
+
+        // Teks branding minimalis di bawah
+        g_u8g2.setFont(u8g2_font_5x7_tf);
+        const char* const prompt = "WATER DETECTOR";
+        g_u8g2.drawStr(centeredX(prompt), 60, prompt);
+
+    } else if (elapsed < 2600) {
+        // -------------------------------------------------------------
+        // FASE 2: IMPAK SPLASH & GELOMBANG RIAK KONSENTRIS (1300 - 2600 ms)
+        // -------------------------------------------------------------
+        uint32_t tPhase = elapsed - 1300;
+        constexpr uint8_t impactX = 64;
+        constexpr uint8_t impactY = 48;
+
+        // 1. Partikel percikan air memantul (0 - 650 ms)
+        if (tPhase < 650) {
+            float pSplash = static_cast<float>(tPhase) / 650.0f;
+            float arcH = sinf(pSplash * 3.14159f);
+
+            int16_t px1 = impactX - static_cast<int16_t>(pSplash * 22.0f);
+            int16_t py1 = impactY - static_cast<int16_t>(arcH * 16.0f);
+            if (px1 >= 0 && py1 >= 0 && py1 < DISPLAY_HEIGHT) {
+                g_u8g2.drawDisc(static_cast<uint8_t>(px1), static_cast<uint8_t>(py1), 1);
+            }
+
+            int16_t px2 = impactX - static_cast<int16_t>(pSplash * 11.0f);
+            int16_t py2 = impactY - static_cast<int16_t>(arcH * 22.0f);
+            if (px2 >= 0 && py2 >= 0 && py2 < DISPLAY_HEIGHT) {
+                g_u8g2.drawDisc(static_cast<uint8_t>(px2), static_cast<uint8_t>(py2), 1);
+            }
+
+            int16_t px3 = impactX + static_cast<int16_t>(pSplash * 11.0f);
+            int16_t py3 = impactY - static_cast<int16_t>(arcH * 22.0f);
+            if (px3 < DISPLAY_WIDTH && py3 >= 0 && py3 < DISPLAY_HEIGHT) {
+                g_u8g2.drawDisc(static_cast<uint8_t>(px3), static_cast<uint8_t>(py3), 1);
+            }
+
+            int16_t px4 = impactX + static_cast<int16_t>(pSplash * 22.0f);
+            int16_t py4 = impactY - static_cast<int16_t>(arcH * 16.0f);
+            if (px4 < DISPLAY_WIDTH && py4 >= 0 && py4 < DISPLAY_HEIGHT) {
+                g_u8g2.drawDisc(static_cast<uint8_t>(px4), static_cast<uint8_t>(py4), 1);
+            }
+        }
+
+        // 2. Tetesan pantulan tengah (rebound crown spike) (150 - 750 ms)
+        if (tPhase >= 150 && tPhase < 750) {
+            float pReb = static_cast<float>(tPhase - 150) / 600.0f;
+            float rebH = sinf(pReb * 3.14159f);
+            int16_t rebY = impactY - static_cast<int16_t>(rebH * 18.0f);
+            if (rebY >= 0 && rebY < DISPLAY_HEIGHT) {
+                g_u8g2.drawDisc(impactX, static_cast<uint8_t>(rebY), 2);
+                g_u8g2.drawLine(impactX, static_cast<uint8_t>(rebY), impactX, impactY);
+            }
+        }
+
+        // 3. Gelombang elips konsentris melebar (Ripples)
+        // Riak 1
+        float rx1 = (static_cast<float>(tPhase) / 1300.0f) * 60.0f;
+        float ry1 = rx1 * 0.28f;
+        if (rx1 >= 2.0f && rx1 < 64.0f && ry1 >= 1.0f) {
+            g_u8g2.drawEllipse(impactX, impactY, static_cast<uint8_t>(rx1), static_cast<uint8_t>(ry1), U8G2_DRAW_ALL);
+        }
+
+        // Riak 2 (delay 250ms)
+        if (tPhase > 250) {
+            float rx2 = (static_cast<float>(tPhase - 250) / 1050.0f) * 46.0f;
+            float ry2 = rx2 * 0.28f;
+            if (rx2 >= 2.0f && rx2 < 64.0f && ry2 >= 1.0f) {
+                g_u8g2.drawEllipse(impactX, impactY, static_cast<uint8_t>(rx2), static_cast<uint8_t>(ry2), U8G2_DRAW_ALL);
+            }
+        }
+
+        // Riak 3 (delay 500ms)
+        if (tPhase > 500) {
+            float rx3 = (static_cast<float>(tPhase - 500) / 800.0f) * 32.0f;
+            float ry3 = rx3 * 0.28f;
+            if (rx3 >= 2.0f && rx3 < 64.0f && ry3 >= 1.0f) {
+                g_u8g2.drawEllipse(impactX, impactY, static_cast<uint8_t>(rx3), static_cast<uint8_t>(ry3), U8G2_DRAW_ALL);
+            }
+        }
+
+        // Teks branding
+        g_u8g2.setFont(u8g2_font_5x7_tf);
+        const char* const prompt = "WATER DETECTOR";
+        g_u8g2.drawStr(centeredX(prompt), 60, prompt);
+
+    } else {
+        // -------------------------------------------------------------
+        // FASE 3 & 4: GELOMBANG AIR NAIK & GELEMBUNG (2600 - 5000 ms)
+        // -------------------------------------------------------------
+        uint32_t tPhase = elapsed - 2600;
+        float pWave = static_cast<float>(tPhase) / 2400.0f;
+        if (pWave > 1.0f) pWave = 1.0f;
+
+        // Ketinggian dasar air naik dari Y=52 hingga Y=26 secara halus (ease in-out)
+        float ease = 0.5f * (1.0f - cosf(pWave * 3.14159f));
+        float baseWaterY = 52.0f - (26.0f * ease);
+
+        // Render Dual Sine Wave (lapisan gelombang air)
+        float waveAmp = 3.0f * (1.0f - pWave * 0.25f);
+        float waveSpeed1 = static_cast<float>(elapsed) * 0.008f;
+        float waveSpeed2 = static_cast<float>(elapsed) * 0.005f;
+
+        for (uint8_t x = 0; x < DISPLAY_WIDTH; x++) {
+            // Gelombang utama (Foreground wave)
+            float w1 = sinf(static_cast<float>(x) * 0.09f + waveSpeed1) * waveAmp;
+            int16_t y1 = static_cast<int16_t>(baseWaterY + w1);
+            if (y1 < 0) y1 = 0;
+            if (y1 < DISPLAY_HEIGHT) {
+                g_u8g2.drawVLine(x, y1, DISPLAY_HEIGHT - y1);
+            }
+
+            // Puncak gelombang kedua (Background crest highlight)
+            if ((x & 1) == 0) {
+                float w2 = sinf(static_cast<float>(x) * 0.07f - waveSpeed2 + 1.6f) * (waveAmp * 0.8f);
+                int16_t y2 = static_cast<int16_t>(baseWaterY - 3.0f + w2);
+                if (y2 >= 0 && y2 < y1) {
+                    g_u8g2.drawPixel(x, static_cast<uint8_t>(y2));
+                }
+            }
+        }
+
+        // Render Gelembung Udara yang mengapung ke atas (Floating Bubbles)
+        struct BubbleDef {
+            uint8_t  baseX;
+            uint16_t period;
+            uint16_t phase;
+            uint8_t  radius;
+        };
+        static constexpr BubbleDef BUBBLES[5] = {
+            { 20, 1300, 0,   2 },
+            { 46, 1100, 280, 1 },
+            { 70, 1400, 520, 3 },
+            { 94, 1200, 150, 2 },
+            { 112, 1000, 700, 1 }
+        };
+
+        for (uint8_t i = 0; i < 5; i++) {
+            uint32_t bTime = (elapsed + BUBBLES[i].phase) % BUBBLES[i].period;
+            float bProgress = static_cast<float>(bTime) / static_cast<float>(BUBBLES[i].period);
+            
+            float wobble = sinf(static_cast<float>(elapsed) * 0.007f + static_cast<float>(i)) * 2.5f;
+            int16_t bx = static_cast<int16_t>(BUBBLES[i].baseX + wobble);
+            int16_t by = static_cast<int16_t>(63.0f - bProgress * (63.0f - baseWaterY));
+
+            if (by > static_cast<int16_t>(baseWaterY) + 3 && by < 62 && bx >= 3 && bx < DISPLAY_WIDTH - 3) {
+                g_u8g2.setDrawColor(0);
+                g_u8g2.drawDisc(static_cast<uint8_t>(bx), static_cast<uint8_t>(by), BUBBLES[i].radius);
+                
+                g_u8g2.setDrawColor(1);
+                g_u8g2.drawCircle(static_cast<uint8_t>(bx), static_cast<uint8_t>(by), BUBBLES[i].radius);
+                if (BUBBLES[i].radius >= 2) {
+                    g_u8g2.drawPixel(static_cast<uint8_t>(bx - 1), static_cast<uint8_t>(by - 1));
+                }
+            }
+        }
+
+        // Teks Judul & Status di atas permukaan air
+        g_u8g2.setDrawColor(1);
+        g_u8g2.setFont(u8g2_font_7x14B_tf);
+        const char* const appTitle = "WATER QUALITY";
+        g_u8g2.drawStr(centeredX(appTitle), 12, appTitle);
+
+        g_u8g2.setFont(u8g2_font_5x7_tf);
+        const char* const statusStr = "INITIALIZING SENSORS...";
+        g_u8g2.drawStr(centeredX(statusStr), 21, statusStr);
     }
 }
 
@@ -843,6 +1066,7 @@ static void drawFactoryResetConfirm() {
 typedef void (*DrawFn)();
 
 static DrawFn s_drawTable[static_cast<uint8_t>(MenuState::COUNT)] = {
+    drawBootAnimation,                  // BOOT_ANIMATION
     drawSplash,                         // SPLASH
     drawHome,                           // HOME
     drawAmbientTemperatureInput,        // INPUT_AMBIENT_TEMPERATURE
@@ -885,11 +1109,12 @@ static void applyDisplaySettings() {
 // =============================================================================
 
 void gui_init() {
-    s_splashStartTick   = millis();
+    s_bootAnimStartTick = millis();
+    s_splashStartTick   = 0;
     s_samplingStartTick = 0;
     // Set langsung tanpa mutex: pre-scheduler, tidak ada task lain.
-    g_systemState.previousMenu = MenuState::SPLASH;
-    g_systemState.currentMenu = MenuState::SPLASH;
+    g_systemState.previousMenu = MenuState::BOOT_ANIMATION;
+    g_systemState.currentMenu = MenuState::BOOT_ANIMATION;
     g_systemState.cursorIndex = 0;
     g_systemState.measurementSubPage = 0;
     g_systemState.aboutSubPage = 0;
@@ -910,7 +1135,17 @@ void gui_update(const ButtonEventMsg& msg) {
     const MenuState state = g_systemState.currentMenu;
 
     switch (state) {
+        case MenuState::BOOT_ANIMATION:
+            if (isActivate) {
+                s_splashStartTick = millis();
+                transitionToLocked(MenuState::SPLASH);
+            }
+            break;
+
         case MenuState::SPLASH:
+            if (isActivate) {
+                transitionToLocked(MenuState::HOME);
+            }
             break;
 
         case MenuState::HOME:
@@ -1294,8 +1529,24 @@ void gui_update(const ButtonEventMsg& msg) {
 }
 
 void gui_tick() {
-    // 1. Tampilkan bukti penyimpanan kalibrasi sebelum kembali ke sub-menu.
-    if (g_systemState.currentMenu == MenuState::CALIBRATION_TURBIDITY_WIZARD) {
+    // 1. Transisi otomatis Boot Animation Air (5 detik)
+    if (g_systemState.currentMenu == MenuState::BOOT_ANIMATION) {
+        if ((millis() - s_bootAnimStartTick) >= BOOT_ANIMATION_MS) {
+            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+                s_splashStartTick = millis();
+                transitionToLocked(MenuState::SPLASH);
+                xSemaphoreGive(g_dataMutex);
+            }
+        } else {
+            // Picu rendering frame berikutnya secara kontinu selama animasi berlangsung
+            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+                g_systemState.displayDirty = true;
+                xSemaphoreGive(g_dataMutex);
+            }
+        }
+    }
+    // 2. Tampilkan bukti penyimpanan kalibrasi sebelum kembali ke sub-menu.
+    else if (g_systemState.currentMenu == MenuState::CALIBRATION_TURBIDITY_WIZARD) {
         if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
             if (g_systemState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SUCCESS &&
                 millis() - g_systemState.turbidityCalibSuccessTick >= TURBIDITY_CALIB_SUCCESS_DISPLAY_MS) {
