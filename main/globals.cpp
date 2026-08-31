@@ -65,8 +65,8 @@ bool globals_init() {
 
     // --- Nilai awal SystemState ---
     g_systemState.activeParameter    = WaterParameter::AIR_MINUM_HIGIENE;
-    g_systemState.currentMenu        = MenuState::SPLASH;
-    g_systemState.previousMenu       = MenuState::SPLASH;
+    g_systemState.currentMenu        = MenuState::BOOT_ANIMATION;
+    g_systemState.previousMenu       = MenuState::BOOT_ANIMATION;
     g_systemState.cursorIndex        = 0;
     g_systemState.measurementSubPage = 0;
     g_systemState.aboutSubPage       = 0;

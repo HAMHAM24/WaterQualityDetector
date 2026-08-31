@@ -163,8 +163,8 @@ constexpr TickType_t BUTTON_REPEAT_MS        = 150;
 constexpr TickType_t TASK_PERIOD_BUTTON_MS       = 15;    
 constexpr TickType_t TASK_PERIOD_TEMPERATURE_MS  = 1000;  
 constexpr TickType_t TASK_PERIOD_WATER_SENSOR_MS = 200;   
-constexpr TickType_t TASK_PERIOD_GUI_MS          = 50;    
-constexpr TickType_t TASK_PERIOD_OLED_MS         = 100;   
+constexpr TickType_t TASK_PERIOD_GUI_MS          = 35;    
+constexpr TickType_t TASK_PERIOD_OLED_MS         = 40;   
 constexpr TickType_t TASK_PERIOD_SERIAL_DEBUG_MS = 1000;  
 
 constexpr TickType_t DS18B20_CONVERSION_MS = 750;
@@ -201,7 +201,8 @@ constexpr uint8_t MENU_LAST_LINE_Y    = DISPLAY_HEIGHT - DISPLAY_STATUSBAR_H - 1
 // LAIN-LAIN
 // =============================================================================
 constexpr uint32_t SERIAL_BAUD_RATE   = 115200;
-constexpr TickType_t SPLASH_SCREEN_MS = 2000;
+constexpr TickType_t BOOT_ANIMATION_MS = 5000;
+constexpr TickType_t SPLASH_SCREEN_MS  = 2000;
 constexpr TickType_t SAMPLING_SCREEN_MS = 5000; 
 constexpr uint8_t  BUTTON_EVENT_QUEUE_LENGTH = 8;
 

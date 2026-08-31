@@ -59,7 +59,8 @@ enum class WaterParameter : uint8_t {
 // ENUM — STATE HALAMAN GUI (Finite State Machine)
 // =============================================================================
 enum class MenuState : uint8_t {
-    SPLASH = 0,
+    BOOT_ANIMATION = 0,
+    SPLASH,
     HOME,
     INPUT_AMBIENT_TEMPERATURE,
     WAITING_SAMPLING,
