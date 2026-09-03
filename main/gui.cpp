@@ -293,20 +293,38 @@ static void drawBootAnimation() {
 
     } else {
         // -------------------------------------------------------------
-        // FASE 3 & 4: GELOMBANG AIR NAIK & GELEMBUNG (2600 - 5000 ms)
+        // FASE 3 & 4: GELOMBANG AIR NAIK, GELEMBUNG & AIR PASANG (2600 - 5000 ms)
         // -------------------------------------------------------------
-        uint32_t tPhase = elapsed - 2600;
-        float pWave = static_cast<float>(tPhase) / 2400.0f;
-        if (pWave > 1.0f) pWave = 1.0f;
+        float baseWaterY;
+        float waveAmp;
+        bool showInitialText = false;
 
-        // Ketinggian dasar air naik dari Y=52 hingga Y=26 secara halus (ease in-out)
-        float ease = 0.5f * (1.0f - cosf(pWave * 3.14159f));
-        float baseWaterY = 52.0f - (26.0f * ease);
+        if (elapsed < 4100) {
+            // Fase 3: Air naik ke tengah layar (Y=52 -> Y=28)
+            uint32_t tPhase = elapsed - 2600;
+            float pWave = static_cast<float>(tPhase) / 1500.0f;
+            if (pWave > 1.0f) pWave = 1.0f;
 
-        // Render Dual Sine Wave (lapisan gelombang air)
-        float waveAmp = 3.0f * (1.0f - pWave * 0.25f);
-        float waveSpeed1 = static_cast<float>(elapsed) * 0.008f;
-        float waveSpeed2 = static_cast<float>(elapsed) * 0.005f;
+            float ease = 0.5f * (1.0f - cosf(pWave * 3.14159f));
+            baseWaterY = 52.0f - (24.0f * ease); // dari 52 ke 28
+            waveAmp = 3.2f;
+            showInitialText = true;
+        } else {
+            // Fase 4 (Air Pasang / Water Surge Fill):
+            // Permukaan air naik menyapu seluruh layar (Y=28 -> Y=-6)
+            uint32_t tSurge = elapsed - 4100;
+            float pSurge = static_cast<float>(tSurge) / 900.0f;
+            if (pSurge > 1.0f) pSurge = 1.0f;
+
+            float easeSurge = 0.5f * (1.0f - cosf(pSurge * 3.14159f));
+            baseWaterY = 28.0f - (34.0f * easeSurge); // dari 28 ke -6
+            waveAmp = 3.2f * (1.0f - pSurge * 0.4f);
+            showInitialText = (baseWaterY > 15.0f);
+        }
+
+        // Render Dual Sine Wave (lapisan gelombang air bergerak)
+        float waveSpeed1 = static_cast<float>(elapsed) * 0.009f;
+        float waveSpeed2 = static_cast<float>(elapsed) * 0.006f;
 
         for (uint8_t x = 0; x < DISPLAY_WIDTH; x++) {
             // Gelombang utama (Foreground wave)
@@ -327,50 +345,55 @@ static void drawBootAnimation() {
             }
         }
 
-        // Render Gelembung Udara yang mengapung ke atas (Floating Bubbles)
-        struct BubbleDef {
-            uint8_t  baseX;
-            uint16_t period;
-            uint16_t phase;
-            uint8_t  radius;
-        };
-        static constexpr BubbleDef BUBBLES[5] = {
-            { 20, 1300, 0,   2 },
-            { 46, 1100, 280, 1 },
-            { 70, 1400, 520, 3 },
-            { 94, 1200, 150, 2 },
-            { 112, 1000, 700, 1 }
-        };
+        // Render Gelembung Udara (Floating Bubbles)
+        if (baseWaterY < 60.0f) {
+            struct BubbleDef {
+                uint8_t  baseX;
+                uint16_t period;
+                uint16_t phase;
+                uint8_t  radius;
+            };
+            static constexpr BubbleDef BUBBLES[5] = {
+                { 20, 1300, 0,   2 },
+                { 46, 1100, 280, 1 },
+                { 70, 1400, 520, 3 },
+                { 94, 1200, 150, 2 },
+                { 112, 1000, 700, 1 }
+            };
 
-        for (uint8_t i = 0; i < 5; i++) {
-            uint32_t bTime = (elapsed + BUBBLES[i].phase) % BUBBLES[i].period;
-            float bProgress = static_cast<float>(bTime) / static_cast<float>(BUBBLES[i].period);
-            
-            float wobble = sinf(static_cast<float>(elapsed) * 0.007f + static_cast<float>(i)) * 2.5f;
-            int16_t bx = static_cast<int16_t>(BUBBLES[i].baseX + wobble);
-            int16_t by = static_cast<int16_t>(63.0f - bProgress * (63.0f - baseWaterY));
-
-            if (by > static_cast<int16_t>(baseWaterY) + 3 && by < 62 && bx >= 3 && bx < DISPLAY_WIDTH - 3) {
-                g_u8g2.setDrawColor(0);
-                g_u8g2.drawDisc(static_cast<uint8_t>(bx), static_cast<uint8_t>(by), BUBBLES[i].radius);
+            for (uint8_t i = 0; i < 5; i++) {
+                uint32_t bTime = (elapsed + BUBBLES[i].phase) % BUBBLES[i].period;
+                float bProgress = static_cast<float>(bTime) / static_cast<float>(BUBBLES[i].period);
                 
-                g_u8g2.setDrawColor(1);
-                g_u8g2.drawCircle(static_cast<uint8_t>(bx), static_cast<uint8_t>(by), BUBBLES[i].radius);
-                if (BUBBLES[i].radius >= 2) {
-                    g_u8g2.drawPixel(static_cast<uint8_t>(bx - 1), static_cast<uint8_t>(by - 1));
+                float wobble = sinf(static_cast<float>(elapsed) * 0.007f + static_cast<float>(i)) * 2.5f;
+                int16_t bx = static_cast<int16_t>(BUBBLES[i].baseX + wobble);
+                float topLimit = (baseWaterY > 0.0f) ? baseWaterY : 0.0f;
+                int16_t by = static_cast<int16_t>(63.0f - bProgress * (63.0f - topLimit));
+
+                if (by > static_cast<int16_t>(baseWaterY) + 3 && by < 62 && bx >= 3 && bx < DISPLAY_WIDTH - 3) {
+                    g_u8g2.setDrawColor(0);
+                    g_u8g2.drawDisc(static_cast<uint8_t>(bx), static_cast<uint8_t>(by), BUBBLES[i].radius);
+                    
+                    g_u8g2.setDrawColor(1);
+                    g_u8g2.drawCircle(static_cast<uint8_t>(bx), static_cast<uint8_t>(by), BUBBLES[i].radius);
+                    if (BUBBLES[i].radius >= 2) {
+                        g_u8g2.drawPixel(static_cast<uint8_t>(bx - 1), static_cast<uint8_t>(by - 1));
+                    }
                 }
             }
         }
 
         // Teks Judul & Status di atas permukaan air
-        g_u8g2.setDrawColor(1);
-        g_u8g2.setFont(u8g2_font_7x14B_tf);
-        const char* const appTitle = "WATER QUALITY";
-        g_u8g2.drawStr(centeredX(appTitle), 12, appTitle);
+        if (showInitialText) {
+            g_u8g2.setDrawColor(1);
+            g_u8g2.setFont(u8g2_font_7x14B_tf);
+            const char* const appTitle = "WATER QUALITY";
+            g_u8g2.drawStr(centeredX(appTitle), 12, appTitle);
 
-        g_u8g2.setFont(u8g2_font_5x7_tf);
-        const char* const statusStr = "INITIALIZING SENSORS...";
-        g_u8g2.drawStr(centeredX(statusStr), 21, statusStr);
+            g_u8g2.setFont(u8g2_font_5x7_tf);
+            const char* const statusStr = "INITIALIZING SENSORS...";
+            g_u8g2.drawStr(centeredX(statusStr), 21, statusStr);
+        }
     }
 }
 
@@ -380,6 +403,7 @@ static void drawSplash() {
     static const char* const titleLine2 = "Quality Index";
     static const char* const titleLine3 = "FBN";
 
+    // 1. Gambar teks konten utama Splash Screen
     g_u8g2.setFont(u8g2_font_7x14B_tf);
     g_u8g2.drawStr(centeredX(titleLine1), 18, titleLine1);
     g_u8g2.drawStr(centeredX(titleLine2), 33, titleLine2);
@@ -389,6 +413,30 @@ static void drawSplash() {
     char versionLine[24];
     snprintf(versionLine, sizeof(versionLine), "v%s", FIRMWARE_VERSION);
     g_u8g2.drawStr(centeredX(versionLine), 60, versionLine);
+
+    // 2. Efek Transisi Wave Drain Reveal (Air Surut mengalir ke bawah selama 650 ms pertama)
+    uint32_t splashElapsed = millis() - s_splashStartTick;
+    constexpr uint32_t REVEAL_DURATION_MS = 650;
+
+    if (splashElapsed < REVEAL_DURATION_MS) {
+        float pDrain = static_cast<float>(splashElapsed) / static_cast<float>(REVEAL_DURATION_MS);
+        float easeDrain = 0.5f * (1.0f - cosf(pDrain * 3.14159f));
+        // Garis permukaan air surut turun dari Y=-4 hingga Y=68
+        float drainY = -4.0f + 72.0f * easeDrain;
+
+        float waveSpeed = static_cast<float>(splashElapsed) * 0.012f;
+        float waveAmp = 3.5f * (1.0f - pDrain * 0.6f);
+
+        for (uint8_t x = 0; x < DISPLAY_WIDTH; x++) {
+            float w = sinf(static_cast<float>(x) * 0.10f + waveSpeed) * waveAmp;
+            int16_t wy = static_cast<int16_t>(drainY + w);
+            if (wy < DISPLAY_HEIGHT) {
+                if (wy < 0) wy = 0;
+                // Tutupi sisa bagian bawah layar dengan massa air yang sedang surut
+                g_u8g2.drawVLine(x, wy, DISPLAY_HEIGHT - wy);
+            }
+        }
+    }
 }
 
 /** @brief Menu Utama (Pemilihan Objek Air & Fitur) */
@@ -1556,11 +1604,19 @@ void gui_tick() {
             xSemaphoreGive(g_dataMutex);
         }
     }
-    // 2. Transisi otomatis Splash Screen (2 detik)
+    // 3. Transisi otomatis Splash Screen (2 detik) & Animasi Wave Drain Reveal (650 ms)
     else if (g_systemState.currentMenu == MenuState::SPLASH) {
-        if ((millis() - s_splashStartTick) >= SPLASH_SCREEN_MS) {
+        const uint32_t splashElapsed = millis() - s_splashStartTick;
+        if (splashElapsed >= SPLASH_SCREEN_MS) {
             if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
                 transitionToLocked(MenuState::HOME);
+                xSemaphoreGive(g_dataMutex);
+            }
+        } else if (splashElapsed < 700) {
+            // Selama efek wave drain reveal berlangsung, terus picu dirty agar
+            // animasi surut air berjalan sangat mulus (~25 FPS)
+            if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
+                g_systemState.displayDirty = true;
                 xSemaphoreGive(g_dataMutex);
             }
         }
