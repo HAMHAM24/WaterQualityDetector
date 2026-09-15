@@ -21,9 +21,9 @@ Proyek ini dirancang sebagai instrumen uji kualitas fisik air lapangan portabel 
   - `Halaman 1/3`: Dashboard hasil pengukuran live & skor mutu.
   - `Halaman 2/3`: Diagnosis parameter penyebab (menunjukkan status mutu per-sensor).
   - `Halaman 3/3`: Saran tindakan spesifik dan terarah tanpa teks terpotong.
-- **Kalibrasi Interaktif & Permanen di Flash EEPROM**:
+- **Kalibrasi Sensor & Monitoring**:
   - TDS 1-Titik dengan ketelitian step $\pm 1\text{ ppm}$.
-  - Turbidity Wizard 2-Titik (Titik 1: Air Aquades 0 NTU, Titik 2: Larutan Standar Custom $1–3000\text{ NTU}$ step $\pm 5\text{ NTU}$).
+  - Turbidity menggunakan regresi linear ADC terhadap referensi Lab Bante; koefisien diperbarui offline dengan Python.
   - Suhu Offset DS18B20 step $\pm 0.1^\circ\text{C}$.
   - Kecerahan (*Brightness*) & Kontras OLED otomatis tersimpan di Flash.
   - Halaman pengaman **Konfirmasi Reset Pabrik** (*Anti-Accidental Reset*).
@@ -64,8 +64,8 @@ Digital Sensor    (0-3.3V ADC)           (0-3.3V ADC)         (128x64 400 kHz)  
                          ┌────────────────────┴────────────────────┐
                          ▼                                         ▼
                  [6 Tombol Navigasi]                    [Emulasi Flash EEPROM]
-             UP/DOWN/LEFT/RIGHT/OK/BACK                 TDS K, Vclear, Vstd,
-             (Internal Pull-Up Active LOW)              Offset, Brightness/Contrast
+              UP/DOWN/LEFT/RIGHT/OK/BACK                 TDS K, Offset,
+              (Internal Pull-Up Active LOW)              Brightness/Contrast
 ```
 
 ---
@@ -317,10 +317,11 @@ Berdasarkan Permenkes No. 2/2023 Tabel 10 dan standar kolam renang:
 
 ---
 
-### 8.3. Kalibrasi Turbidity Dua Titik
-Rumus yang digunakan untuk menghitung slope linier akurat:
-$$\text{Slope} = \frac{\text{NTU}_{\text{standar}}}{V_{\text{jernih}} - V_{\text{standar}}}$$
-$$\text{NTU} = (V_{\text{jernih}} - V_{\text{ukur}}) \times \text{Slope}$$
+### 8.3. Kalibrasi Turbidity Regresi ADC
+Turbidity dikonversi dari ADC moving average STM32 menggunakan koefisien hasil regresi linear terhadap referensi Lab Bante:
+$$\text{NTU} = (1{,}251645 \times \text{ADC}) - 888{,}878830$$
+
+Kalibrasi tervalidasi pada ADC `710-1084` atau `0-468 NTU`. Di atas rentang tersebut firmware tetap menghitung NTU, tetapi menandainya sebagai estimasi. Detail metode regresi tersedia pada [`kalibrasiturbidy.md`](kalibrasiturbidy.md).
 
 ---
 
@@ -503,9 +504,10 @@ Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\l
 
 ### 9.7. Menu Kalibrasi Sensor, Sub-Menu, & Live Monitor
 
-Sistem memisahkan secara tegas antara **Live Monitor** dan **Kalibrasi**:
+Sistem memisahkan secara tegas antara **Live Monitor** dan **Kalibrasi** untuk TDS dan Suhu. Turbidity menggunakan koefisien regresi hardcode, sehingga menu Turbidity langsung membuka Live Monitor:
 - **Live Monitor**: Digunakan untuk mengecek sinyal sensor mentah (*raw data*) secara real-time sebelum proses kalibrasi atau konversi matematika (`ADC`, `Volt`, `Raw`, `Offset`, `Status`). Halaman ini tidak menampilkan nilai hasil konversi (ppm / NTU) karena pembacaan belum tentu valid sebelum kalibrasi selesai.
 - **Kalibrasi**: Memakai larutan acuan untuk menghitung rumus/faktor konversi baru dan menyimpannya secara permanen ke Flash EEPROM.
+- **Turbidity**: Live Monitor dipakai untuk mencatat ADC stabil. Koefisien baru dihitung offline melalui `kalibrasi_turbidity.py`, lalu firmware di-upload ulang.
 
 #### Glosarium & Arti Singkatan:
 - **`ADC`** : *Analog-to-Digital Converter* (nilai digital mentah 12-bit ADC STM32, rentang 0–4095).
@@ -516,9 +518,10 @@ Sistem memisahkan secara tegas antara **Live Monitor** dan **Kalibrasi**:
 - **`Turb`** : *Turbidity* (kekeruhan cairan).
 - **`ppm`** : *Parts per million* (satuan konsentrasi TDS, setara mg/L).
 - **`NTU`** : *Nephelometric Turbidity Unit* (satuan kekeruhan air).
-- **`V0`** : Tegangan keluaran sensor kekeruhan pada air jernih / 0 NTU ($V_{\text{jernih}}$).
-- **`VStd`** : Tegangan keluaran sensor kekeruhan pada larutan standar ($V_{\text{standar}}$).
-- **`Std`** : Nilai kekeruhan acuan larutan standar custom (NTU).
+- **`Stat`** : Status validitas nilai turbidity, bukan status kelayakan air/Fuzzy.
+- **`TERKALIBRASI`** : ADC berada pada rentang data Lab Bante `710-1084`.
+- **`BAWAH RENTANG`** : ADC lebih kecil dari `710`; nilai NTU dijepit ke 0.
+- **`ESTIMASI >468`** : ADC lebih besar dari `1084`; belum diverifikasi Lab Bante.
 - **`dT`** : Deviasi/selisih suhu ($|\text{Suhu Air} - \text{Suhu Udara}|$).
 - **`SL`** : Sangat Layak (kategori mutu air tertinggi).
 - **`PS`** : Perlu Proses Sedang.
@@ -541,8 +544,8 @@ Sistem memisahkan secara tegas antara **Live Monitor** dan **Kalibrasi**:
 +---------------------------------------------------+
 ```
 
-#### B. Sub-Menu Tiap Sensor (TDS / Turbidity / Suhu)
-Setiap parameter sensor memiliki sub-menu tersendiri:
+#### B. Sub-Menu TDS dan Suhu
+TDS dan Suhu memiliki sub-menu kalibrasi interaktif dan Live Monitor:
 ```text
 +---------------------------------------------------+
 | TDS / Turbidity / Suhu                            |
@@ -578,14 +581,16 @@ Setiap parameter sensor memiliki sub-menu tersendiri:
 +---------------------------------------------------+
 | Live Turb                                         |
 |---------------------------------------------------|
-| ADC   : 3210                                      |
-| Volt  : 2.59 V                                    |
-| Suhu  : 27.5 C                                    |
-| Status: OK                                        |
+| ADC   : 852                                       |
+| Volt  : 0.69 V                                    |
+| NTU   : 177.5                                     |
+| Stat  : TERKALIBRASI                              |
 |---------------------------------------------------|
 |                                         BACK:Menu |
 +---------------------------------------------------+
 ```
+
+Menu **Kalibrasi Sensor -> Turbidity** langsung membuka halaman ini. ADC yang ditampilkan adalah hasil moving average, yaitu nilai yang dipakai dalam rumus regresi.
 
 **3. Live Monitor Suhu:**
 ```text
@@ -619,34 +624,7 @@ Setiap parameter sensor memiliki sub-menu tersendiri:
 +---------------------------------------------------+
 ```
 
-**2. Kalibrasi Turbidity 2-Titik Wizard ($\pm 5\text{ NTU}$ custom step):**
-*Langkah 1 (Air Jernih 0 NTU):*
-```text
-+---------------------------------------------------+
-| Turbidity (1/2)                                   |
-|---------------------------------------------------|
-| Volt   : 3.25 V                                   |
-| Air jernih: OK ambil                              |
-|                                                   |
-|---------------------------------------------------|
-| Air jernih 0 NTU                       BACK:Batal |
-+---------------------------------------------------+
-```
-*Langkah 2 (Larutan Standar Custom):*
-```text
-+---------------------------------------------------+
-| Turbidity (2/2)                                   |
-|---------------------------------------------------|
-| Volt   : 2.10 V                                   |
-| Std: 1000 NTU                                     |
-| V0 : 3.25 V                                       |
-| UP/DN atur OK simpan                              |
-|---------------------------------------------------|
-| Larutan standar                        BACK:Batal |
-+---------------------------------------------------+
-```
-
-**3. Kalibrasi Suhu Offset ($\pm 0.1^\circ\text{C}$ step):**
+**2. Kalibrasi Suhu Offset ($\pm 0.1^\circ\text{C}$ step):**
 ```text
 +---------------------------------------------------+
 | Kalibrasi Suhu                                    |
@@ -660,7 +638,7 @@ Setiap parameter sensor memiliki sub-menu tersendiri:
 +---------------------------------------------------+
 ```
 
-**4. Konfirmasi Pengaman Reset Pabrik:**
+**3. Konfirmasi Pengaman Reset Pabrik:**
 ```text
 +---------------------------------------------------+
 | Reset Pabrik?                                     |
@@ -752,7 +730,7 @@ Air Minum (Ideal)     : 1.00 [S.LAYAK]
 Air Minum (1 Batas)   : 0.67 [P.SED]
 Pemandian (28C, 0.3NTU): [LAYAK]
 Pemandian (28C, 2.5NTU): [TDK LAYAK]
-Turb 2 titik (2.50V): 50.0 NTU
+Turb regresi (ADC 852): 177.5 NTU
 ========================================
 ```
 
@@ -776,11 +754,12 @@ Turb 2 titik (2.50V): 50.0 NTU
 4. Tekan tombol `UP` atau `DOWN` untuk menyelaraskan nilai **Target** di layar hingga sama dengan larutan standar (`707 ppm`) dengan ketelitian **$\pm 1\text{ ppm}$**.
 5. Tekan tombol **OK** untuk menghitung $K$-Factor baru dan menyimpannya ke Flash EEPROM.
 
-### C. Kalibrasi Turbidity (2-Point Custom Wizard)
-1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Turbidity** $\rightarrow$ **Kalibrasi**.
-2. **Titik 1 (0 NTU)**: Celupkan sensor ke air aquades murni. Amati nilai voltase hingga stabil, lalu tekan **OK**.
-3. **Titik 2 (Standar Custom)**: Bilas sensor, lalu celupkan ke satu larutan standar yang dimiliki (misal **100 NTU**, **500 NTU**, atau **1000 NTU**). Tekan `UP`/`DOWN` untuk menyelaraskan angka `Std` di layar dengan label nilai larutan (kenaikan **$\pm 5\text{ NTU}$**).
-4. Tekan tombol **OK**. Firmware akan mengunci kedua titik, menghitung slope akurat sensor ($\text{Slope} = \frac{\text{Std}}{V_0 - V_{\text{Std}}}$), dan menyimpannya ke Flash EEPROM.
+### C. Kalibrasi Turbidity (Regresi ADC)
+1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Turbidity**. Alat langsung menampilkan Live Monitor.
+2. Celupkan sensor ke sampel dan tunggu ADC stabil. Catat ADC yang tampil bersama nilai NTU dari Lab Bante untuk sampel yang sama.
+3. Masukkan semua pasangan data ke `kalibrasi_turbidity.py`, lalu jalankan `python kalibrasi_turbidity.py`.
+4. Salin koefisien `TURBIDITY_SLOPE` dan `TURBIDITY_INTERCEPT` ke `main/config.h`, kemudian build dan upload firmware.
+5. Status `TERKALIBRASI` berarti ADC berada pada rentang pengujian `710-1084` atau `0-468 NTU`; `ESTIMASI >468` berarti hasil belum terverifikasi Lab Bante.
 
 ---
 
