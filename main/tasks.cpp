@@ -69,11 +69,6 @@ static void taskWaterSensor(void* /* pvParameters */) {
         if (storage_processPendingSave()) {
             if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
                 g_systemState.calibSaving = false;
-                if (g_systemState.currentMenu == MenuState::CALIBRATION_TURBIDITY_WIZARD &&
-                    g_systemState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SAVING) {
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::SUCCESS;
-                    g_systemState.turbidityCalibSuccessTick = millis();
-                }
                 g_systemState.displayDirty = true;
                 xSemaphoreGive(g_dataMutex);
             }
@@ -83,11 +78,6 @@ static void taskWaterSensor(void* /* pvParameters */) {
             if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
                 if (g_systemState.calibSaving) {
                     g_systemState.calibSaving = false;
-                    if (g_systemState.currentMenu == MenuState::CALIBRATION_TURBIDITY_WIZARD &&
-                        g_systemState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SAVING) {
-                        g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::SUCCESS;
-                        g_systemState.turbidityCalibSuccessTick = millis();
-                    }
                     g_systemState.displayDirty = true;
                 }
                 xSemaphoreGive(g_dataMutex);
@@ -159,7 +149,7 @@ static void taskSerialDebug(void* /* pvParameters */) {
     static const char* const menuNames[] = {
         "BOOT_ANIMATION", "SPLASH", "HOME", "INPUT_AMBIENT_TEMPERATURE", "WAITING_SAMPLING", "MEASUREMENT",
         "CALIBRATION", "CALIBRATION_TDS_MENU", "CALIBRATION_TDS_WIZARD", "TDS_MONITOR",
-        "CALIBRATION_TURBIDITY_MENU", "CALIBRATION_TURBIDITY_WIZARD", "TURBIDITY_MONITOR",
+        "TURBIDITY_MONITOR",
         "CALIBRATION_TEMPERATURE_MENU", "CALIBRATION_TEMPERATURE_WIZARD", "TEMPERATURE_MONITOR",
         "SETTINGS", "ABOUT", "FACTORY_RESET_CONFIRM"
     };
@@ -193,8 +183,10 @@ static void taskSerialDebug(void* /* pvParameters */) {
         Serial.print(F(" / "));
         Serial.println(sensorSnapshot.tdsFiltered);
 
-        Serial.print(F("Turb Raw/Flt  : "));
+        Serial.print(F("Turb Raw/Avg/Ntu: "));
         Serial.print(sensorSnapshot.turbidityRaw);
+        Serial.print(F(" / "));
+        Serial.print(sensorSnapshot.turbidityAdcFiltered, 1);
         Serial.print(F(" / "));
         Serial.println(sensorSnapshot.turbidityFiltered);
 

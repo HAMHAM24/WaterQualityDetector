@@ -41,6 +41,7 @@ bool globals_init() {
     g_sensorData.tdsVoltage         = 0.0f;
     g_sensorData.tdsFiltered        = 0.0f;
     g_sensorData.turbidityRaw       = 0;
+    g_sensorData.turbidityAdcFiltered = 0.0f;
     g_sensorData.turbidityVoltage   = 0.0f;
     g_sensorData.turbidityFiltered  = 0.0f;
     g_sensorData.tdsCompensated     = 0.0f;
@@ -54,6 +55,7 @@ bool globals_init() {
     g_sensorData.temperatureStatus  = SensorStatus::ERROR;
     g_sensorData.tdsStatus          = SensorStatus::ERROR;
     g_sensorData.turbidityStatus    = SensorStatus::ERROR;
+    g_sensorData.turbidityCalibrationStatus = TurbidityCalibrationStatus::ERROR;
 
     // --- Nilai awal ButtonState untuk seluruh tombol ---
     for (uint8_t i = 0; i < static_cast<uint8_t>(ButtonID::COUNT); i++) {
@@ -75,13 +77,8 @@ bool globals_init() {
     g_systemState.stabilizationCount = 0;
     g_systemState.stabilizationTimedOut = false;
     g_systemState.calibTdsTarget     = TDS_CALIB_TARGET_DEFAULT;
-    g_systemState.calibTurbidityTarget = static_cast<uint16_t>(g_calibParams.turbidityNtuStandard);
-    g_systemState.calibTurbidityStep = 0;
-    g_systemState.calibTurbidityVClear = 0.0f;
     g_systemState.calibSaving        = false;
     g_systemState.calibTdsError      = false;
-    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-    g_systemState.turbidityCalibSuccessTick = 0;
     g_systemState.settingsBrightness = g_calibParams.displayBrightness;
     g_systemState.settingsContrast   = g_calibParams.displayContrast;
     g_systemState.settingsAdjustMode = false;

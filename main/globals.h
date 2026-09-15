@@ -69,9 +69,7 @@ enum class MenuState : uint8_t {
     CALIBRATION_TDS_MENU,
     CALIBRATION_TDS_WIZARD,
     TDS_MONITOR,
-    CALIBRATION_TURBIDITY_MENU,    // sub-menu: Kalibrasi / Live Monitor
-    CALIBRATION_TURBIDITY_WIZARD,  // wizard 2 langkah kalibrasi turbidity
-    TURBIDITY_MONITOR,             // live monitor raw data turbidity
+    TURBIDITY_MONITOR,             // monitor ADC, NTU, dan status kalibrasi
     CALIBRATION_TEMPERATURE_MENU,
     CALIBRATION_TEMPERATURE_WIZARD,
     TEMPERATURE_MONITOR,
@@ -81,13 +79,11 @@ enum class MenuState : uint8_t {
     COUNT   // jumlah total state, dipakai untuk ukuran dispatch table
 };
 
-enum class TurbidityCalibrationFeedback : uint8_t {
-    NONE = 0,
-    SENSOR_ERROR,
-    VOLTAGE_TOO_LOW,
-    DELTA_V_TOO_SMALL,
-    SAVING,
-    SUCCESS
+enum class TurbidityCalibrationStatus : uint8_t {
+    ERROR = 0,
+    BELOW_RANGE,
+    CALIBRATED,
+    ESTIMATED_ABOVE_RANGE
 };
 
 // =============================================================================
@@ -100,6 +96,7 @@ struct SensorData {
     float tdsVoltage;            // tegangan sisi sensor setelah koreksi divider
     float tdsFiltered;           // TDS hasil konversi + kalibrasi (ppm)
     uint16_t turbidityRaw;       // ADC mentah 0-4095
+    float turbidityAdcFiltered;  // ADC moving average yang dipakai rumus NTU
     float turbidityVoltage;      // tegangan sisi sensor setelah koreksi divider
     float turbidityFiltered;     // kekeruhan hasil konversi (NTU)
 
@@ -117,6 +114,7 @@ struct SensorData {
     SensorStatus temperatureStatus;
     SensorStatus tdsStatus;
     SensorStatus turbidityStatus;
+    TurbidityCalibrationStatus turbidityCalibrationStatus;
 };
 
 // =============================================================================
@@ -153,13 +151,8 @@ struct SystemState {
     bool stabilizationTimedOut;       // Menunggu keputusan manual setelah timeout
 
     uint16_t calibTdsTarget;          // nilai acuan larutan TDS pada layar kalibrasi
-    uint16_t calibTurbidityTarget;    // nilai custom titik kedua turbidity (NTU)
-    uint8_t calibTurbidityStep;       // 0=air jernih, 1=larutan standar
-    float calibTurbidityVClear;       // kandidat titik 0 NTU, belum ditulis sebelum wizard selesai
     bool calibSaving;                 // true saat pesan "Menyimpan..." perlu tampil
     bool calibTdsError;               // true saat OK ditekan tapi sinyal TDS terlalu lemah
-    TurbidityCalibrationFeedback turbidityCalibFeedback;
-    uint32_t turbidityCalibSuccessTick; // waktu mulai pesan sukses kalibrasi
 
     uint8_t settingsBrightness;       // 10-255
     uint8_t settingsContrast;         // 10-255

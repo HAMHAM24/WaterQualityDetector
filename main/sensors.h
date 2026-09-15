@@ -81,11 +81,11 @@ float sensors_adcToVoltage(float raw, float divider);
 float sensors_voltageToTds(float voltage, float temperature);
 
 /**
- * @brief Mengubah tegangan sensor turbidity menjadi nilai kekeruhan (NTU)
- *        relatif terhadap tegangan air jernih hasil kalibrasi.
- * @param voltage Tegangan sisi sensor (volt).
+ * @brief Mengubah ADC turbidity terfilter menjadi NTU menggunakan regresi
+ *        linear terhadap referensi Lab Bante.
+ * @param raw ADC 12-bit STM32, dapat berupa nilai rata-rata filter.
  * @return Nilai kekeruhan dalam NTU.
  */
-float sensors_voltageToNtu(float voltage);
+float sensors_turbidityAdcToNtu(float raw);
 
 #endif // SENSORS_H

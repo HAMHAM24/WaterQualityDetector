@@ -20,7 +20,6 @@
 #include "storage.h"
 #include <STM32FreeRTOS.h>
 #include <stdio.h>
-#include <math.h>
 
 // =============================================================================
 // KONSTANTA DAFTAR MENU (4 ITEM UTAMA)
@@ -65,7 +64,6 @@ static uint32_t s_bootAnimStartTick = 0;
 static uint32_t s_splashStartTick   = 0;
 static uint32_t s_samplingStartTick = 0;
 static uint32_t s_stabilitySampleTick = 0;
-static constexpr uint32_t TURBIDITY_CALIB_SUCCESS_DISPLAY_MS = 2000;
 static float s_stabilityMin = 0.0f;
 static float s_stabilityMax = 0.0f;
 
@@ -826,21 +824,14 @@ static void drawTdsMonitor() {
     display_drawStatusBar("", "BACK:Menu");
 }
 
-/** @brief Sub-menu Turbidity: pilih antara Kalibrasi atau Live Monitor. */
-static void drawCalibrationTurbidityMenu() {
-    drawSimpleList("Turbidity", SENSOR_SUB_ITEMS, SENSOR_SUB_ITEM_COUNT,
-                   s_viewState.cursorIndex);
-    display_drawStatusBar("OK:Pilih", "BACK:Menu");
-}
-
-/** @brief Live Monitor Turbidity — 1 layar raw data. */
+/** @brief Live Monitor Turbidity — data yang dipakai regresi dan statusnya. */
 static void drawTurbidityMonitor() {
     display_drawHeader("Live Turb");
     g_u8g2.setFont(u8g2_font_6x10_tf);
     uint8_t y = MENU_FIRST_LINE_Y;
     char lineBuf[32];
 
-    snprintf(lineBuf, sizeof(lineBuf), "ADC   : %u", s_view.turbidityRaw);
+    snprintf(lineBuf, sizeof(lineBuf), "ADC   : %.0f", s_view.turbidityAdcFiltered);
     g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
     char vStr[8];
@@ -849,18 +840,28 @@ static void drawTurbidityMonitor() {
     snprintf(lineBuf, sizeof(lineBuf), "Volt  : %s V", p);
     g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
-    if (s_view.temperatureStatus == SensorStatus::OK) {
-        char tStr[8];
-        dtostrf(s_view.temperature, 4, 1, tStr);
-        char* pT = tStr; while (*pT == ' ') pT++;
-        snprintf(lineBuf, sizeof(lineBuf), "Suhu  : %s C", pT);
-    } else {
-        snprintf(lineBuf, sizeof(lineBuf), "Suhu  : ERROR");
-    }
+    char ntuStr[10];
+    dtostrf(s_view.turbidityFiltered, 5, 1, ntuStr);
+    char* pNtu = ntuStr; while (*pNtu == ' ') pNtu++;
+    snprintf(lineBuf, sizeof(lineBuf), "NTU   : %s", pNtu);
     g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
-    snprintf(lineBuf, sizeof(lineBuf), "Status: %s",
-             (s_view.turbidityStatus == SensorStatus::OK) ? "OK" : "ERROR");
+    const char* calibrationStatus = "ERROR";
+    switch (s_view.turbidityCalibrationStatus) {
+        case TurbidityCalibrationStatus::BELOW_RANGE:
+            calibrationStatus = "BAWAH RENTANG";
+            break;
+        case TurbidityCalibrationStatus::CALIBRATED:
+            calibrationStatus = "TERKALIBRASI";
+            break;
+        case TurbidityCalibrationStatus::ESTIMATED_ABOVE_RANGE:
+            calibrationStatus = "ESTIMASI >468";
+            break;
+        case TurbidityCalibrationStatus::ERROR:
+        default:
+            break;
+    }
+    snprintf(lineBuf, sizeof(lineBuf), "Stat  : %s", calibrationStatus);
     g_u8g2.drawStr(2, y, lineBuf);
 
     display_drawStatusBar("", "BACK:Menu");
@@ -941,53 +942,6 @@ static void drawCalibrationSub() {
                 g_u8g2.drawStr(2, y, "UP/DN:Atur  OK:Simpan");
             }
             display_drawStatusBar("Celup larutan", "BACK:Batal");
-            break;
-        }
-
-        case MenuState::CALIBRATION_TURBIDITY_WIZARD: {
-            display_drawHeader(s_viewState.calibTurbidityStep == 0
-                                ? "Turbidity (1/2)" : "Turbidity (2/2)");
-
-            char vStr[8];
-            dtostrf(s_view.turbidityVoltage, 4, 2, vStr);
-            char* p = vStr; while (*p == ' ') p++;
-            snprintf(lineBuf, sizeof(lineBuf), "Volt   : %s V", p);
-            g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
-
-            if (s_viewState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SAVING) {
-                g_u8g2.drawStr(2, y, "Menyimpan...");
-            } else if (s_viewState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SUCCESS) {
-                g_u8g2.drawStr(2, y, "Kalibrasi berhasil"); y += MENU_LINE_HEIGHT;
-                snprintf(lineBuf, sizeof(lineBuf), "%u NTU tersimpan", s_viewState.calibTurbidityTarget);
-                g_u8g2.drawStr(2, y, lineBuf);
-            } else if (s_viewState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SENSOR_ERROR) {
-                g_u8g2.drawStr(2, y, "Turbidity error"); y += MENU_LINE_HEIGHT;
-                g_u8g2.drawStr(2, y, "Periksa kabel/probe");
-            } else if (s_viewState.turbidityCalibFeedback == TurbidityCalibrationFeedback::VOLTAGE_TOO_LOW) {
-                g_u8g2.drawStr(2, y, "Volt terlalu rendah"); y += MENU_LINE_HEIGHT;
-                g_u8g2.drawStr(2, y, "Cek probe/larutan");
-            } else if (s_viewState.turbidityCalibFeedback == TurbidityCalibrationFeedback::DELTA_V_TOO_SMALL) {
-                const float deltaV = s_viewState.calibTurbidityVClear - s_view.turbidityVoltage;
-                char dvStr[8];
-                dtostrf(deltaV, 4, 3, dvStr);
-                char* pDv = dvStr; while (*pDv == ' ') pDv++;
-                snprintf(lineBuf, sizeof(lineBuf), "dV kecil: %s V", pDv);
-                g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
-                g_u8g2.drawStr(2, y, "Ganti/cek larutan std");
-            } else if (s_viewState.calibTurbidityStep == 0) {
-                g_u8g2.drawStr(2, y, "Air jernih: OK ambil");
-            } else {
-                snprintf(lineBuf, sizeof(lineBuf), "Std: %u NTU", s_viewState.calibTurbidityTarget);
-                g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
-                char clearStr[8];
-                dtostrf(s_viewState.calibTurbidityVClear, 4, 2, clearStr);
-                p = clearStr; while (*p == ' ') p++;
-                snprintf(lineBuf, sizeof(lineBuf), "V0 : %s V", p);
-                g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
-                g_u8g2.drawStr(2, y, "UP/DN atur OK simpan");
-            }
-            display_drawStatusBar(s_viewState.calibTurbidityStep == 0
-                                  ? "Air jernih 0 NTU" : "Larutan standar", "BACK:Batal");
             break;
         }
 
@@ -1124,8 +1078,6 @@ static DrawFn s_drawTable[static_cast<uint8_t>(MenuState::COUNT)] = {
     drawCalibrationTdsMenu,             // CALIBRATION_TDS_MENU
     drawCalibrationSub,                 // CALIBRATION_TDS_WIZARD
     drawTdsMonitor,                     // TDS_MONITOR
-    drawCalibrationTurbidityMenu,       // CALIBRATION_TURBIDITY_MENU
-    drawCalibrationSub,                 // CALIBRATION_TURBIDITY_WIZARD
     drawTurbidityMonitor,               // TURBIDITY_MONITOR
     drawCalibrationTemperatureMenu,     // CALIBRATION_TEMPERATURE_MENU
     drawCalibrationSub,                 // CALIBRATION_TEMPERATURE_WIZARD
@@ -1284,7 +1236,7 @@ void gui_update(const ButtonEventMsg& msg) {
                 if (g_systemState.cursorIndex == 0) {
                     transitionToLocked(MenuState::CALIBRATION_TDS_MENU);
                 } else if (g_systemState.cursorIndex == 1) {
-                    transitionToLocked(MenuState::CALIBRATION_TURBIDITY_MENU);
+                    transitionToLocked(MenuState::TURBIDITY_MONITOR);
                 } else if (g_systemState.cursorIndex == 2) {
                     transitionToLocked(MenuState::CALIBRATION_TEMPERATURE_MENU);
                 } else if (g_systemState.cursorIndex == 3) {
@@ -1359,88 +1311,9 @@ void gui_update(const ButtonEventMsg& msg) {
             }
             break;
 
-        case MenuState::CALIBRATION_TURBIDITY_MENU:
-            if (isRepeatable && msg.id == ButtonID::UP)
-                moveCursorLocked(false, SENSOR_SUB_ITEM_COUNT);
-            else if (isRepeatable && msg.id == ButtonID::DOWN)
-                moveCursorLocked(true, SENSOR_SUB_ITEM_COUNT);
-            else if (isActivate && msg.id == ButtonID::OK) {
-                if (g_systemState.cursorIndex == 0) {
-                    // Kalibrasi — masuk wizard
-                    g_systemState.calibTurbidityStep = 0;
-                    g_systemState.calibTurbidityVClear = 0.0f;
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-                    transitionToLocked(MenuState::CALIBRATION_TURBIDITY_WIZARD);
-                } else {
-                    // Live Monitor
-                    transitionToLocked(MenuState::TURBIDITY_MONITOR);
-                }
-            } else if (isActivate && msg.id == ButtonID::BACK) {
-                transitionToLocked(MenuState::CALIBRATION);
-            }
-            break;
-
-        case MenuState::CALIBRATION_TURBIDITY_WIZARD:
-            if (g_systemState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SAVING ||
-                g_systemState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SUCCESS) {
-                break;
-            }
-            if (s_viewState.calibTurbidityStep == 0 && isActivate && msg.id == ButtonID::OK) {
-                float volt = g_sensorData.turbidityVoltage;
-                if (g_sensorData.turbidityStatus != SensorStatus::OK) {
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::SENSOR_ERROR;
-                    g_systemState.displayDirty = true;
-                } else if (volt > TURBIDITY_VCLEAR_MIN) {
-                    g_systemState.calibTurbidityVClear = volt;
-                    g_systemState.calibTurbidityStep = 1;
-                    g_systemState.calibTurbidityTarget = static_cast<uint16_t>(g_calibParams.turbidityNtuStandard);
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-                    g_systemState.displayDirty = true;
-                } else {
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::VOLTAGE_TOO_LOW;
-                    g_systemState.displayDirty = true;
-                }
-            } else if (s_viewState.calibTurbidityStep == 1 && isRepeatable && msg.id == ButtonID::UP) {
-                if (g_systemState.calibTurbidityTarget + TURBIDITY_NTU_STANDARD_STEP <= TURBIDITY_NTU_STANDARD_MAX) {
-                    g_systemState.calibTurbidityTarget += TURBIDITY_NTU_STANDARD_STEP;
-                }
-                g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-                g_systemState.displayDirty = true;
-            } else if (s_viewState.calibTurbidityStep == 1 && isRepeatable && msg.id == ButtonID::DOWN) {
-                if (g_systemState.calibTurbidityTarget > TURBIDITY_NTU_STANDARD_MIN + TURBIDITY_NTU_STANDARD_STEP - 1) {
-                    g_systemState.calibTurbidityTarget -= TURBIDITY_NTU_STANDARD_STEP;
-                }
-                g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-                g_systemState.displayDirty = true;
-            } else if (s_viewState.calibTurbidityStep == 1 && isActivate && msg.id == ButtonID::OK) {
-                const float volt = g_sensorData.turbidityVoltage;
-                const float deltaV = volt - g_systemState.calibTurbidityVClear;
-                if (g_sensorData.turbidityStatus == SensorStatus::OK &&
-                    fabsf(deltaV) >= TURBIDITY_MIN_CALIBRATION_DELTA_V) {
-                    g_calibParams.turbidityVClear = g_systemState.calibTurbidityVClear;
-                    g_calibParams.turbidityVStandard = volt;
-                    g_calibParams.turbidityNtuStandard = static_cast<float>(g_systemState.calibTurbidityTarget);
-                    storage_requestSave(g_calibParams);
-                    g_systemState.calibSaving = true;
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::SUCCESS;
-                    g_systemState.turbidityCalibSuccessTick = millis();
-                    g_systemState.displayDirty = true;
-                } else if (g_sensorData.turbidityStatus != SensorStatus::OK) {
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::SENSOR_ERROR;
-                    g_systemState.displayDirty = true;
-                } else {
-                    g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::DELTA_V_TOO_SMALL;
-                    g_systemState.displayDirty = true;
-                }
-            } else if (isActivate && msg.id == ButtonID::BACK) {
-                g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-                transitionToLocked(MenuState::CALIBRATION_TURBIDITY_MENU);
-            }
-            break;
-
         case MenuState::TURBIDITY_MONITOR:
             if (isActivate && (msg.id == ButtonID::BACK || msg.id == ButtonID::OK)) {
-                transitionToLocked(MenuState::CALIBRATION_TURBIDITY_MENU);
+                transitionToLocked(MenuState::CALIBRATION);
             }
             break;
 
@@ -1593,18 +1466,7 @@ void gui_tick() {
             }
         }
     }
-    // 2. Tampilkan bukti penyimpanan kalibrasi sebelum kembali ke sub-menu.
-    else if (g_systemState.currentMenu == MenuState::CALIBRATION_TURBIDITY_WIZARD) {
-        if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
-            if (g_systemState.turbidityCalibFeedback == TurbidityCalibrationFeedback::SUCCESS &&
-                millis() - g_systemState.turbidityCalibSuccessTick >= TURBIDITY_CALIB_SUCCESS_DISPLAY_MS) {
-                g_systemState.turbidityCalibFeedback = TurbidityCalibrationFeedback::NONE;
-                transitionToLocked(MenuState::CALIBRATION_TURBIDITY_MENU);
-            }
-            xSemaphoreGive(g_dataMutex);
-        }
-    }
-    // 3. Transisi otomatis Splash Screen (2 detik) & Animasi Wave Drain Reveal (650 ms)
+    // 2. Transisi otomatis Splash Screen (2 detik) & Animasi Wave Drain Reveal (650 ms)
     else if (g_systemState.currentMenu == MenuState::SPLASH) {
         const uint32_t splashElapsed = millis() - s_splashStartTick;
         if (splashElapsed >= SPLASH_SCREEN_MS) {

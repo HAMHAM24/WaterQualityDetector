@@ -223,28 +223,27 @@ uint16_t sensors_readTurbidityRaw() {
     return static_cast<uint16_t>(analogRead(PIN_TURBIDITY_ANALOG));
 }
 
-float sensors_voltageToNtu(float voltage) {
-    // Tegangan air jernih dipakai sebagai acuan untuk menghitung NTU relatif.
-    // Dua titik: 0 NTU (Vclear) dan larutan standar custom (Vstandard).
-    // Bila titik kedua belum sah, gunakan slope legacy agar alat tetap bekerja.
-    float slope = TURBIDITY_NTU_PER_VOLT;
-    const float deltaV = g_calibParams.turbidityVStandard - g_calibParams.turbidityVClear;
-    if (g_calibParams.turbidityVStandard > 0.0f &&
-        fabsf(deltaV) >= TURBIDITY_MIN_CALIBRATION_DELTA_V) {
-        slope = g_calibParams.turbidityNtuStandard / deltaV;
-        float ntu = (voltage - g_calibParams.turbidityVClear) * slope;
-        if (ntu < 0.0f) ntu = 0.0f;
-        if (ntu > 3000.0f) ntu = 3000.0f;
-        return ntu;
+float sensors_turbidityAdcToNtu(float raw) {
+    // y = mx + b, dengan x = ADC STM32 dan y = NTU referensi Lab Bante.
+    const float ntu = TURBIDITY_SLOPE * raw + TURBIDITY_INTERCEPT;
+
+    // Nilai negatif tidak memiliki makna fisik. ADC di atas rentang validasi
+    // tetap dihitung sebagai estimasi, sehingga tidak boleh diklaim terkalibrasi.
+    return ntu < TURBIDITY_CALIBRATED_NTU_MIN ? TURBIDITY_CALIBRATED_NTU_MIN : ntu;
+}
+
+static TurbidityCalibrationStatus getTurbidityCalibrationStatus(uint16_t raw,
+                                                                 float filteredRaw) {
+    if (raw == 0 || raw >= ADC_MAX_VALUE) {
+        return TurbidityCalibrationStatus::ERROR;
     }
-
-    // Pertahankan kurva fallback lama sampai kalibrasi dua titik berhasil dilakukan.
-    float ntu = (g_calibParams.turbidityVClear - voltage) * slope;
-
-    if (ntu < 0.0f) ntu = 0.0f;
-    if (ntu > 3000.0f) ntu = 3000.0f; // Limit to typical sensor max
-
-    return ntu;
+    if (filteredRaw < TURBIDITY_CALIBRATED_ADC_MIN) {
+        return TurbidityCalibrationStatus::BELOW_RANGE;
+    }
+    if (filteredRaw <= TURBIDITY_CALIBRATED_ADC_MAX) {
+        return TurbidityCalibrationStatus::CALIBRATED;
+    }
+    return TurbidityCalibrationStatus::ESTIMATED_ABOVE_RANGE;
 }
 
 /**
@@ -257,15 +256,20 @@ void sensors_updateTurbidity() {
                                                     s_turbiditySampleFilled, s_turbiditySampleSum, raw);
 
     const float voltage = sensors_adcToVoltage(filteredRaw, TURBIDITY_INPUT_DIVIDER);
-    const float ntu = sensors_voltageToNtu(voltage);
+    const float ntu = sensors_turbidityAdcToNtu(filteredRaw);
 
-    const SensorStatus status = (raw == 0) ? SensorStatus::ERROR : SensorStatus::OK;
+    const SensorStatus status = (raw == 0 || raw >= ADC_MAX_VALUE) ? SensorStatus::ERROR
+                                                                     : SensorStatus::OK;
+    const TurbidityCalibrationStatus calibrationStatus =
+        getTurbidityCalibrationStatus(raw, filteredRaw);
 
     if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
         g_sensorData.turbidityRaw      = raw;
+        g_sensorData.turbidityAdcFiltered = filteredRaw;
         g_sensorData.turbidityVoltage  = voltage;
         g_sensorData.turbidityFiltered = ntu;
         g_sensorData.turbidityStatus   = status;
+        g_sensorData.turbidityCalibrationStatus = calibrationStatus;
         g_systemState.displayDirty     = true;
         xSemaphoreGive(g_dataMutex);
     }

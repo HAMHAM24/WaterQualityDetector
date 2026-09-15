@@ -101,9 +101,8 @@ void storage_clampParams(CalibrationParams& params) {
     params.tdsKFactor = constrain(params.tdsKFactor,
                                    TDS_KFACTOR_MIN, TDS_KFACTOR_MAX);
 
-    // Batas atas V_clear adalah tegangan tertinggi yang benar-benar dapat
-    // dibaca ADC setelah dikoreksi pembagi tegangan. Nilai di luar rentang
-    // ini membuat perhitungan NTU tidak pernah bisa mencapai 0.
+    // Field turbidity berikut adalah data legacy. Tetap divalidasi agar data
+    // EEPROM lama aman dibaca, walau regresi ADC tidak lagi menggunakannya.
     const float vclearMax = ADC_REFERENCE_VOLTAGE * TURBIDITY_INPUT_DIVIDER;
     params.turbidityVClear = constrain(params.turbidityVClear,
                                         TURBIDITY_VCLEAR_MIN, vclearMax);
@@ -155,9 +154,7 @@ void storage_init() {
     CalibrationParams before = g_calibParams;
     storage_clampParams(g_calibParams);
 
-    // Deteksi V_clear firmware lama: default lama 3.0V terlalu rendah untuk
-    // sensor 5V + ADC 3.3V. Jika masih di bawah 3.1V, paksa ke default baru
-    // supaya user dipaksa kalibrasi ulang setelah update firmware.
+    // Normalisasi field legacy agar format EEPROM lama tetap valid.
     if (g_calibParams.turbidityVClear < 3.1f) {
         g_calibParams.turbidityVClear = TURBIDITY_VCLEAR_DEFAULT;
     }

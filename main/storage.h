@@ -33,10 +33,10 @@
 struct CalibrationParams {
     uint32_t magicHeader;      // Marker untuk memvalidasi format data EEPROM
     float    tdsKFactor;       // Faktor pengali kalibrasi TDS
-    float    turbidityVClear;  // Tegangan sensor saat air murni/jernih 0 NTU
+    float    turbidityVClear;  // Legacy wizard turbidity; dipertahankan agar layout EEPROM kompatibel
     float    tempOffset;       // Offset koreksi suhu °C
-    float    turbidityVStandard;   // Tegangan titik standar turbidity (> 0 NTU)
-    float    turbidityNtuStandard; // Nilai custom titik standar (1-3000 NTU)
+    float    turbidityVStandard;   // Legacy wizard turbidity; tidak dipakai regresi ADC
+    float    turbidityNtuStandard; // Legacy wizard turbidity; tidak dipakai regresi ADC
     uint8_t  displayBrightness;    // Pengaturan brightness OLED
     uint8_t  displayContrast;      // Pengaturan contrast OLED
 };
