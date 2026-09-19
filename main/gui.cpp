@@ -831,7 +831,7 @@ static void drawTurbidityMonitor() {
     uint8_t y = MENU_FIRST_LINE_Y;
     char lineBuf[32];
 
-    snprintf(lineBuf, sizeof(lineBuf), "ADC   : %.0f", s_view.turbidityAdcFiltered);
+    snprintf(lineBuf, sizeof(lineBuf), "ADC   : %.1f", s_view.turbidityAdcFiltered);
     g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
     char vStr[8];
@@ -852,10 +852,10 @@ static void drawTurbidityMonitor() {
             calibrationStatus = "BAWAH RENTANG";
             break;
         case TurbidityCalibrationStatus::CALIBRATED:
-            calibrationStatus = "TERKALIBRASI";
+            calibrationStatus = "DALAM RENTANG";
             break;
         case TurbidityCalibrationStatus::ESTIMATED_ABOVE_RANGE:
-            calibrationStatus = "ESTIMASI >468";
+            calibrationStatus = "EKSTRAPOLASI";
             break;
         case TurbidityCalibrationStatus::ERROR:
         default:

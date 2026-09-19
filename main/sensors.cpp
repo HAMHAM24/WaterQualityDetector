@@ -227,7 +227,7 @@ float sensors_turbidityAdcToNtu(float raw) {
     // y = mx + b, dengan x = ADC STM32 dan y = NTU referensi Lab Bante.
     const float ntu = TURBIDITY_SLOPE * raw + TURBIDITY_INTERCEPT;
 
-    // Nilai negatif tidak memiliki makna fisik. ADC di atas rentang validasi
+    // Nilai negatif tidak memiliki makna fisik. ADC di atas rentang data
     // tetap dihitung sebagai estimasi, sehingga tidak boleh diklaim terkalibrasi.
     return ntu < TURBIDITY_CALIBRATED_NTU_MIN ? TURBIDITY_CALIBRATED_NTU_MIN : ntu;
 }
@@ -237,6 +237,7 @@ static TurbidityCalibrationStatus getTurbidityCalibrationStatus(uint16_t raw,
     if (raw == 0 || raw >= ADC_MAX_VALUE) {
         return TurbidityCalibrationStatus::ERROR;
     }
+    // Status berdasarkan cakupan ADC, bukan apakah prediksi dijepit menjadi nol.
     if (filteredRaw < TURBIDITY_CALIBRATED_ADC_MIN) {
         return TurbidityCalibrationStatus::BELOW_RANGE;
     }

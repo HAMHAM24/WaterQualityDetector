@@ -59,11 +59,20 @@ void setup() {
     Serial.print(F("Pemandian (28C, 2.5NTU): "));
     Serial.println(resGagal.semuaAman ? F("[LAYAK]") : F("[TDK LAYAK]"));
 
-    // Validasi regresi ADC terhadap referensi Lab Bante pada salah satu titik.
-    const float ntuTest = TURBIDITY_SLOPE * 852.0f + TURBIDITY_INTERCEPT;
-    Serial.print(F("Turb regresi (ADC 852): "));
-    Serial.print(ntuTest, 1);
-    Serial.println(F(" NTU"));
+    // PASS menguji implementasi rumus, bukan akurasi terhadap Lab Bante.
+    Serial.println(F("Kalibrasi turbidity: 17 titik gabungan"));
+    Serial.print(F("Slope NTU/ADC: ")); Serial.println(TURBIDITY_SLOPE, 6);
+    Serial.print(F("Intercept    : ")); Serial.println(TURBIDITY_INTERCEPT, 6);
+    const float adcTests[] = {710.0f, 735.0f, 736.0f, 754.0f, 795.5f, 852.0f, 1084.0f, 1200.0f};
+    const float expectedNtu[] = {0.0f, 0.0f, 0.12f, 21.91f, 72.14f, 140.54f, 421.37f, 561.78f};
+    for (unsigned int i = 0; i < sizeof(adcTests) / sizeof(adcTests[0]); ++i) {
+        const float ntuTest = sensors_turbidityAdcToNtu(adcTests[i]);
+        const float error = ntuTest - expectedNtu[i];
+        Serial.print(F("ADC ")); Serial.print(adcTests[i], 1);
+        Serial.print(F(" -> ")); Serial.print(ntuTest, 2);
+        Serial.print(F(" NTU : "));
+        Serial.println((error >= -0.01f && error <= 0.01f) ? F("PASS") : F("FAIL"));
+    }
 
     Serial.println(F("========================================"));
 

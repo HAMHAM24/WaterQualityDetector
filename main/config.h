@@ -78,10 +78,11 @@ constexpr uint16_t TDS_CALIB_TARGET_STEP    = 1;   // increment/decrement +- 1 p
 // =============================================================================
 // KALIBRASI SENSOR TURBIDITY
 // =============================================================================
-// Regresi linear ADC STM32 terhadap referensi Lab Bante, dihitung dari delapan
-// titik pada sampel_baru_turbidity.md. Berlaku terverifikasi pada 0-468 NTU.
-constexpr float TURBIDITY_SLOPE     = 1.251645f;
-constexpr float TURBIDITY_INTERCEPT = -888.878830f;
+// Regresi 17 pasangan unik pada kalibrasiturbidy.md; Sampel 6 memakai ADC 795.5.
+// R^2 = 0.901655, RMSE = 34.198 NTU pada data fitting, bukan validasi independen.
+// Kenaikan 1 ADC setara sekitar 1.21 NTU sebelum penjepitan negatif.
+constexpr float TURBIDITY_SLOPE     = 1.210482f;
+constexpr float TURBIDITY_INTERCEPT = -890.794124f;
 constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MIN = 710;
 constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MAX = 1084;
 constexpr float TURBIDITY_CALIBRATED_NTU_MIN = 0.0f;
