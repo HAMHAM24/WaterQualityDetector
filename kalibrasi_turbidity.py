@@ -10,10 +10,17 @@ Grafik bersifat opsional dan memerlukan matplotlib:
 import argparse
 from math import sqrt
 
-# Tambahkan data baru pada dua list ini. Setiap indeks harus merupakan
-# pembacaan ADC dan hasil Lab Bante dari sampel yang sama.
-ADC = [710, 718, 726, 732, 742, 748, 852, 1084]
-NTU_LAB_BANTE = [0.00, 9.44, 19.47, 28.97, 38.72, 47.45, 177.30, 468.00]
+# Data gabungan unik, diurutkan berdasarkan ADC. Full Aquades anomali
+# (916 ADC, 0 NTU) serta pasangan duplikat antarsumber tidak digunakan.
+# Nilai 795.5 adalah titik tengah rentang ADC 791-800 untuk Sampel 6.
+ADC = [
+    710, 718, 726, 732, 742, 748, 754, 779, 788, 790, 795.5,
+    797, 821, 832, 852, 877, 1084,
+]
+NTU_LAB_BANTE = [
+    0.00, 9.44, 19.47, 28.97, 38.72, 47.45, 16.26, 34.43, 32.28,
+    24.00, 40.44, 18.22, 59.98, 87.22, 177.30, 150.90, 468.00,
+]
 
 
 def linear_regression(x, y):

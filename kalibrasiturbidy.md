@@ -2,9 +2,9 @@
 
 ## 1. Tujuan
 
-Dokumen ini menjelaskan cara nilai ADC dari sensor turbidity dikonversi menjadi NTU pada alat berbasis STM32F401CCU6 BlackPill. Dokumen ini dapat dipakai untuk menjelaskan metode kalibrasi kepada client dan sebagai dasar jawaban saat sidang.
+Dokumen ini menjelaskan konversi nilai ADC sensor turbidity menjadi NTU pada alat berbasis STM32F401CCU6 BlackPill. Kalibrasi menggunakan **ADC Alatku** sebagai input dan **Turbidity Alat Lab Bante** sebagai nilai referensi.
 
-Kalibrasi memakai pembacaan **ADC alat sendiri** sebagai input dan **Turbidity Lab Bante** sebagai nilai referensi. Nilai `Turbidity (Alatku)` yang lama tidak digunakan untuk membentuk rumus, karena tujuan kalibrasi adalah menyesuaikan alat sendiri dengan alat referensi.
+Nilai `Turbidity (Alatku)` pada file Excel tidak dipakai untuk membentuk rumus, karena alat tersebut bukan instrumen referensi. Dokumen ini memakai data gabungan dari `kalibrasiturbidy.md` versi sebelumnya dan `Data kalibrasi.xlsx`.
 
 ## 2. Konfigurasi Hardware
 
@@ -24,250 +24,212 @@ ADC 12-bit menghasilkan angka digital dari tegangan analog sensor. Secara teori:
 tegangan ADC = ADC / 4095 x 3,3 V
 ```
 
-Namun, firmware sengaja memakai ADC mentah untuk rumus kalibrasi. Hal ini menghindari galat pembulatan nilai volt dan membuat rumus sesuai langsung dengan data yang direkam saat pengujian.
+Rumus kalibrasi memakai ADC mentah yang sudah difilter, bukan nilai volt. ADC merupakan nilai asli yang direkam oleh STM32 sehingga konversi volt tidak diperlukan untuk menghitung NTU.
 
-## 3. Data Referensi yang Digunakan
+## 3. Data Referensi Gabungan
 
-Berikut delapan pasangan data dari `sampel_baru_turbidity.md` yang dipakai dalam regresi.
+Data berikut disusun berdasarkan ADC secara menaik. Setiap baris adalah satu pasangan ADC alat dan nilai referensi Lab Bante.
 
 
-| No. | ADC alat (x) | Turbidity Lab Bante, NTU (y) |
-| ----: | -------------: | -----------------------------: |
-|   1 |          710 |                         0,00 |
-|   2 |          718 |                         9,44 |
-|   3 |          726 |                        19,47 |
-|   4 |          732 |                        28,97 |
-|   5 |          742 |                        38,72 |
-|   6 |          748 |                        47,45 |
-|   7 |          852 |                       177,30 |
-|   8 |         1084 |                       468,00 |
+| No. | Sumber               | Sampel        | ADC alat (x) | Turbidity Lab Bante, NTU (y) |
+| ----: | ---------------------- | --------------- | -------------: | -----------------------------: |
+|   1 | Referensi sebelumnya | Referensi 1   |          710 |                         0,00 |
+|   2 | Referensi sebelumnya | Referensi 2   |          718 |                         9,44 |
+|   3 | Referensi sebelumnya | Referensi 3   |          726 |                        19,47 |
+|   4 | Referensi sebelumnya | Referensi 4   |          732 |                        28,97 |
+|   5 | Referensi sebelumnya | Referensi 5   |          742 |                        38,72 |
+|   6 | Referensi sebelumnya | Referensi 6   |          748 |                        47,45 |
+|   7 | Excel                | Sampel 1      |          754 |                        16,26 |
+|   8 | Excel                | Sampel 5      |          779 |                        34,43 |
+|   9 | Excel                | Sampel 4      |          788 |                        32,28 |
+|  10 | Excel                | Sampel 3      |          790 |                        24,00 |
+|  11 | Excel                | Sampel 6      |        795,5 |                        40,44 |
+|  12 | Excel                | Sampel 2      |          797 |                        18,22 |
+|  13 | Excel                | Sampel 7      |          821 |                        59,98 |
+|  14 | Excel                | Sampel 8      |          832 |                        87,22 |
+|  15 | Kedua sumber         | Sample extra  |          852 |                       177,30 |
+|  16 | Excel                | Sampel 9      |          877 |                       150,90 |
+|  17 | Kedua sumber         | Full Formazin |         1084 |                       468,00 |
 
-Kondisi sensor tidak dicelup air (`ADC 637`) tidak digunakan karena bukan sampel air dengan nilai referensi Lab Bante. Data tersebut hanya berguna sebagai indikasi diagnostik sensor kosong atau tidak tercelup.
+### 3.1 Aturan Pengolahan Data
+
+- Data `Full Aquades` dari Excel (`ADC 916`, `0,00 NTU`) tidak digunakan karena anomali terhadap titik air jernih lain dan menghasilkan ketidaksesuaian besar dengan pola data gabungan.
+- Kondisi sensor tidak dicelup air (`ADC 637`) tidak digunakan karena bukan sampel air dan tidak mempunyai nilai pembanding Lab Bante.
+- `Sample extra` (`852`, `177,30 NTU`) dan `Full Formazin` (`1084`, `468,00 NTU`) tercatat pada kedua sumber. Masing-masing dihitung satu kali agar pengukuran yang sama tidak memperoleh bobot ganda pada regresi.
+- ADC Sampel 6 pada Excel dicatat sebagai rentang `791-800`. Perhitungan menggunakan titik tengahnya, yaitu `795,5 ADC`, sebagai estimasi. Pengukuran ulang dengan beberapa pembacaan stabil tetap diperlukan.
 
 ## 4. Metode: Regresi Linear Kuadrat Terkecil
 
-Metode yang dipakai adalah **regresi linear sederhana** dengan metode **kuadrat terkecil** (*ordinary least squares*). Metode ini mencari satu garis lurus yang paling mendekati seluruh titik data.
-
-Bentuk umum garis:
+Kalibrasi menggunakan regresi linear sederhana dengan metode kuadrat terkecil (*ordinary least squares*). Metode ini mencari satu garis lurus yang paling mendekati seluruh pasangan data.
 
 ```text
 y = m x + b
 ```
 
-Dalam alat ini:
+Keterangan:
 
 ```text
-y = NTU hasil referensi Lab Bante
-x = ADC mentah STM32 yang sudah difilter
+y = NTU referensi Lab Bante
+x = ADC mentah STM32 setelah moving average
 m = slope atau kemiringan garis
 b = intercept atau titik potong terhadap sumbu y
 ```
 
-Setiap titik memiliki residual atau galat:
+Residual setiap titik dihitung sebagai:
 
 ```text
 residual_i = y_referensi_i - y_prediksi_i
 ```
 
-Kuadrat terkecil memilih `m` dan `b` yang meminimalkan jumlah kuadrat residual:
+Regresi memilih `m` dan `b` yang meminimalkan jumlah kuadrat residual:
 
 ```text
 SSE = jumlah (y_referensi_i - (m x_i + b))^2
 ```
 
-Residual dikuadratkan agar galat positif dan negatif tidak saling menghapus, serta galat besar diberi penalti lebih besar.
-
 ### 4.1 Rumus Slope dan Intercept
 
-Untuk `n` titik data, rata-rata ADC dan rata-rata NTU dihitung terlebih dahulu:
+Untuk `n` titik data:
 
 ```text
 x_bar = jumlah x_i / n
 y_bar = jumlah y_i / n
-```
 
-Kemudian slope dihitung dengan:
-
-```text
 m = jumlah ((x_i - x_bar)(y_i - y_bar)) / jumlah ((x_i - x_bar)^2)
-```
-
-Setelah slope diketahui, intercept dihitung dengan:
-
-```text
 b = y_bar - m x_bar
 ```
 
-### 4.2 Perhitungan Detail dari Data Pengujian
+### 4.2 Perhitungan Data Gabungan
 
-Jumlah data adalah `n = 8`. Dari tabel pada Bagian 3 diperoleh jumlah seluruh nilai ADC dan NTU referensi:
-
-```text
-sum x_i = 710 + 718 + 726 + 732 + 742 + 748 + 852 + 1084
-        = 6312
-
-sum y_i = 0,00 + 9,44 + 19,47 + 28,97 + 38,72 + 47,45 + 177,30 + 468,00
-        = 789,35
-```
-
-Rata-rata kedua variabel adalah:
+Jumlah data adalah `n = 17`.
 
 ```text
-x_bar = sum x_i / n
-      = 6312 / 8
-      = 789
+sum x_i = 13545,5
+sum y_i = 1253,08
 
-y_bar = sum y_i / n
-      = 789,35 / 8
-      = 98,66875
+x_bar = 13545,5 / 17
+      = 796,794117647
+
+y_bar = 1253,08 / 17
+      = 73,710588235
 ```
 
-Untuk menghitung slope, setiap data dikurangi rata-ratanya. Dua jumlah yang diperlukan adalah:
+Nilai jumlah deviasi yang diperlukan untuk regresi adalah:
 
 ```text
-Sxy = sum ((x_i - x_bar)(y_i - y_bar))
-    = 141916,47
+Sxy = jumlah ((x_i - x_bar)(y_i - y_bar))
+    = 150585,777058824
 
-Sxx = sum ((x_i - x_bar)^2)
-    = 113384
+Sxx = jumlah ((x_i - x_bar)^2)
+    = 124401,529411765
 ```
 
-Contoh kontribusi titik pertama, yaitu `ADC = 710` dan `NTU = 0,00`:
-
-```text
-x_1 - x_bar = 710 - 789 = -79
-y_1 - y_bar = 0,00 - 98,66875 = -98,66875
-
-(x_1 - x_bar)(y_1 - y_bar) = (-79)(-98,66875) = 7794,83125
-(x_1 - x_bar)^2 = (-79)^2 = 6241
-```
-
-Perhitungan yang sama dilakukan untuk seluruh delapan titik, kemudian semua kontribusinya dijumlahkan menjadi `Sxy` dan `Sxx` di atas. Slope diperoleh dengan substitusi:
+Slope dan interceptnya adalah:
 
 ```text
 m = Sxy / Sxx
-  = 141916,47 / 113384
-  = 1,2516445883017
-```
+  = 1,210481718118
 
-Nilai ini dibulatkan menjadi:
-
-```text
-m = 1,251644588
-```
-
-Kemudian intercept dihitung menggunakan rata-rata dan slope yang belum dibulatkan:
-
-```text
 b = y_bar - m x_bar
-  = 98,66875 - (1,2516445883017 x 789)
-  = 98,66875 - 987,547580170042
-  = -888,878830170042
+  = -890,794124280201
 ```
 
-Nilai ini dibulatkan menjadi:
+Persamaan regresi sebelum pembulatan firmware:
 
 ```text
-b = -888,878830170
+NTU = (1,210481718118 x ADC) - 890,794124280201
 ```
 
-Dengan demikian, persamaan regresi sebelum pembulatan firmware adalah:
-
-```text
-NTU = (1,2516445883017 x ADC) - 888,878830170042
-```
-
-Firmware memakai enam angka di belakang koma agar ringkas, tetapi selisih pembulatan ini sangat kecil:
-
-```text
-m = 1,251644588...
-b = -888,878830170...
-```
-
-Firmware membulatkan angka secara aman ke enam angka di belakang koma:
+Untuk konstanta `float` firmware, koefisien dapat dibulatkan menjadi enam angka di belakang koma:
 
 ```cpp
-constexpr float TURBIDITY_SLOPE     = 1.251645f;
-constexpr float TURBIDITY_INTERCEPT = -888.878830f;
+constexpr float TURBIDITY_SLOPE = 1.210482f;
+constexpr float TURBIDITY_INTERCEPT = -890.794124f;
 ```
 
-Huruf `f` berarti literal tersebut bertipe `float`. STM32 menggunakan `float` 32-bit untuk efisiensi memori dan waktu komputasi.
-
-Jadi persamaan yang dipakai firmware adalah:
+Sehingga persamaan firmware menjadi:
 
 ```text
-NTU = (1,251645 x ADC) - 888,878830
+NTU = (1,210482 x ADC) - 890,794124
 ```
 
-Nilai intercept negatif bukan berarti turbidity dapat bernilai negatif. Intercept adalah konsekuensi posisi garis regresi pada sumbu matematis. Firmware menjepit hasil negatif menjadi `0 NTU` karena NTU negatif tidak mempunyai makna fisik.
+Intercept negatif adalah konsekuensi matematis dari garis regresi dan bukan berarti NTU negatif mempunyai makna fisik. Firmware harus menjepit hasil negatif menjadi `0 NTU`.
 
 ## 5. Contoh Perhitungan Manual
 
-Misalnya ADC hasil moving average adalah `852`.
+Misalnya ADC hasil moving average adalah `852`:
 
 ```text
-NTU = (1,251645 x 852) - 888,878830
-NTU = 1066,401540 - 888,878830
-NTU = 177,522710 NTU
+NTU = (1,210482 x 852) - 890,794124
+NTU = 1031,330664 - 890,794124
+NTU = 140,536540 NTU
 ```
 
-Prediksi titik tersebut adalah `177,52 NTU`. Nilai Lab Bante pada titik ini adalah `177,30 NTU`, sehingga galatnya sekitar `-0,22 NTU`.
-
-Contoh titik air jernih dengan ADC `710`:
+Nilai Lab Bante pada titik tersebut adalah `177,30 NTU`, sehingga residualnya:
 
 ```text
-NTU = (1,251645 x 710) - 888,878830
-NTU = -0,210880 NTU
+residual = 177,30 - 140,54
+         = 36,76 NTU
 ```
 
-Hasil tersebut dijepit firmware menjadi `0 NTU`.
+Contoh ADC `710`:
+
+```text
+NTU = (1,210482 x 710) - 890,794124
+NTU = -31,351904 NTU
+```
+
+Hasil tersebut harus dijepit firmware menjadi `0 NTU`.
 
 ## 6. Evaluasi Hasil Kalibrasi
 
 
-| Metrik                  |     Hasil | Arti                                                                                    |
-| ------------------------- | ----------: | ----------------------------------------------------------------------------------------- |
-| R kuadrat (R^2)         |  0,999976 | Hampir seluruh variasi NTU referensi pada data ini dapat dijelaskan oleh perubahan ADC. |
-| RMSE                    | 0,735 NTU | Besar galat prediksi tipikal pada delapan titik data.                                   |
-| Galat terbesar          | 1,645 NTU | Terjadi pada titik ADC 732 dan referensi 28,97 NTU.                                     |
-| Rentang tervalidasi     | 0-468 NTU | Rentang nilai Lab Bante yang benar-benar diuji.                                         |
-| Rentang ADC tervalidasi |  710-1084 | Rentang ADC yang mempunyai data pembanding.                                             |
+| Metrik                  |      Hasil | Arti                                                                          |
+| ------------------------- | -----------: | ------------------------------------------------------------------------------- |
+| Jumlah data             |         17 | Pasangan data unik setelah penyaringan dan penghapusan duplikat.              |
+| R kuadrat (R2)          |   0,901655 | Hubungan ADC dan NTU bersifat positif, tetapi variasi data masih cukup besar. |
+| RMSE                    | 34,198 NTU | Besar galat prediksi tipikal terhadap seluruh data gabungan.                  |
+| Galat terbesar          | 55,740 NTU | Terjadi pada ADC 797 dengan referensi 18,22 NTU.                              |
+| Rentang ADC tervalidasi |   710-1084 | Rentang ADC yang memiliki pembanding Lab Bante.                               |
+| Rentang NTU tervalidasi |  0-468 NTU | Rentang nilai Lab Bante yang diuji.                                           |
 
-Nilai `R^2` yang mendekati 1 menunjukkan garis linear cocok sangat baik terhadap delapan titik yang tersedia. Ini bukan berarti sensor pasti akurat pada semua kondisi atau semua NTU. Pengulangan pengukuran dan titik tambahan tetap diperlukan untuk mengukur kestabilan alat.
+Model ini memakai seluruh data gabungan yang telah dipilih, sehingga mencerminkan variasi pada kedua sesi data. Nilai `R2` yang lebih rendah dan RMSE yang lebih tinggi daripada kalibrasi sebelumnya menunjukkan bahwa hasil pembacaan belum konsisten pada semua titik, terutama pada rentang sekitar `754-877 ADC`.
+
+Karena itu, rumus ini dapat disebut kalibrasi gabungan atau kalibrasi awal, tetapi belum cukup untuk mengklaim akurasi tinggi. Setiap larutan perlu diukur ulang minimal tiga sampai lima kali dalam kondisi sensor, pencahayaan, wadah, pengadukan, dan waktu stabilisasi yang sama.
 
 ## 7. Implementasi Firmware STM32
 
-Alur program adalah:
+Alur program:
 
 ```text
 Sensor turbidity analog
-        |
-        v
+|
+v
 PA1 STM32 membaca ADC 12-bit
-        |
-        v
+|
+v
 Moving average 20 sampel
-        |
-        v
-NTU = 1,251645 x ADC - 888,878830
-        |
-        v
+|
+v
+NTU = 1,210482 x ADC - 890,794124
+|
+v
 Jika NTU < 0, jadikan 0
-        |
-        v
+|
+v
 Display, evaluasi ambang, dan Fuzzy
 ```
 
-Koefisien tersimpan di `main/config.h`:
+Apabila rumus baru akan digunakan pada firmware, konstanta yang perlu diterapkan di `main/config.h` adalah:
 
 ```cpp
-constexpr float TURBIDITY_SLOPE     = 1.251645f;
-constexpr float TURBIDITY_INTERCEPT = -888.878830f;
+constexpr float TURBIDITY_SLOPE = 1.210482f;
+constexpr float TURBIDITY_INTERCEPT = -890.794124f;
 constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MIN = 710;
 constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MAX = 1084;
 ```
 
-Fungsi konversi di `main/sensors.cpp`:
+Fungsi konversi harus memakai ADC hasil filter:
 
 ```cpp
 float sensors_turbidityAdcToNtu(float raw) {
@@ -276,82 +238,88 @@ float sensors_turbidityAdcToNtu(float raw) {
 }
 ```
 
-Fungsi pembaruan sensor menggunakan ADC hasil filter, bukan ADC sesaat:
+### 7.1 Resolusi Perubahan ADC
 
-```cpp
-const uint16_t raw = sensors_readTurbidityRaw();
-const float filteredRaw = pushSampleAndAverage(..., raw);
-const float ntu = sensors_turbidityAdcToNtu(filteredRaw);
+Slope kalibrasi adalah `1,210482 NTU per ADC`. Artinya, setiap kenaikan `1 ADC` setara kira-kira `1,21 NTU` menurut model ini.
+
+Perubahan kecil pada pembacaan ADC dapat langsung mengubah hasil NTU. Oleh karena itu, firmware perlu memakai moving average 20 sampel sebelum konversi agar output lebih stabil. Ketelitian pengukuran nyata tetap dibatasi oleh variasi data kalibrasi; resolusi `1,21 NTU per ADC` tidak berarti hasil pengukuran pasti akurat sampai `1,21 NTU`.
+
+### 7.2 Contoh Output Prediksi
+
+
+| ADC input | Perhitungan model                         | Output setelah penjepitan | Status        |
+| ----------: | ------------------------------------------- | --------------------------: | --------------- |
+|       735 | `(1,210482 x 735) - 890,794124 = -1,09`   |                  0,00 NTU | DALAM RENTANG |
+|       736 | `(1,210482 x 736) - 890,794124 = 0,12`    |                  0,12 NTU | DALAM RENTANG |
+|       748 | `(1,210482 x 748) - 890,794124 = 14,65`   |                 14,65 NTU | DALAM RENTANG |
+|       754 | `(1,210482 x 754) - 890,794124 = 21,91`   |                 21,91 NTU | DALAM RENTANG |
+|       761 | `(1,210482 x 761) - 890,794124 = 30,38`   |                 30,38 NTU | DALAM RENTANG |
+|       852 | `(1,210482 x 852) - 890,794124 = 140,54`  |                140,54 NTU | DALAM RENTANG |
+|      1084 | `(1,210482 x 1084) - 890,794124 = 421,37` |                421,37 NTU | DALAM RENTANG |
+|      1200 | `(1,210482 x 1200) - 890,794124 = 561,78` |                561,78 NTU | EKSTRAPOLASI |
+
+Status memakai rentang ADC: kurang dari 710 adalah `BAWAH RENTANG`,
+710-1084 adalah `DALAM RENTANG`, dan lebih dari 1084 adalah `EKSTRAPOLASI`.
+ADC mentah 0 atau 4095 diprioritaskan sebagai `ERROR`.
+ADC 735 tetap dalam rentang data walaupun hasilnya dijepit ke nol.
+Ekstrapolasi tidak berarti output pasti di atas 468 NTU; pada ADC 1084
+prediksinya hanya 421,37 NTU. Status dalam rentang bukan jaminan akurasi.
+
+Contoh keluaran pada serial monitor atau display untuk ADC terfilter `754`:
+
+```text
+ADC filter : 754
+NTU model  : 21,91 NTU
+Status     : DALAM RENTANG
+Catatan    : Kenaikan 1 ADC setara sekitar 1,21 NTU pada model ini.
 ```
-
-Penggunaan filter penting karena noise satu atau dua hitungan ADC dapat mengubah hasil NTU. Dengan slope sekitar `1,25 NTU per ADC`, perubahan 1 ADC secara teori setara sekitar `1,25 NTU`.
-
-Koefisien diperbarui offline melalui `kalibrasi_turbidity.py`, kemudian hasilnya dimasukkan ke `main/config.h` dan firmware di-upload ulang. Wizard dua titik tidak digunakan karena akan mengganti dasar delapan titik referensi dengan hanya dua titik.
-
-Menu **Kalibrasi Sensor -> Turbidity** langsung membuka **Live Turbidity**. Halaman tersebut menampilkan ADC moving average, volt untuk diagnosis rangkaian, NTU hasil regresi, dan `Stat` validitas pembacaan. `Stat` bukan status kualitas air atau hasil Fuzzy.
-
-| Stat | Kondisi | Arti |
-|---|---|---|
-| `ERROR` | ADC mentah 0 atau 4095 | Periksa sensor, kabel, dan rangkaian ADC. |
-| `BAWAH RENTANG` | ADC terfilter kurang dari 710 | Nilai dijepit ke 0 NTU, tetapi belum memiliki pembanding Lab Bante di bawah titik tersebut. |
-| `TERKALIBRASI` | ADC terfilter 710-1084 | Berada pada rentang 0-468 NTU yang diuji terhadap Lab Bante. |
-| `ESTIMASI >468` | ADC terfilter lebih dari 1084 | Rumus menghitung hasil, tetapi belum diverifikasi Lab Bante. |
 
 ## 8. Batas Klaim Pengukuran
 
 
-| Kondisi             | Perlakuan yang benar                                                                                  |
-| --------------------- | ------------------------------------------------------------------------------------------------------- |
-| ADC kurang dari 710 | Hasil dijepit ke 0 NTU; sebutkan sebagai di bawah rentang data kalibrasi.                             |
-| ADC 710 sampai 1084 | Hasil berada dalam rentang kalibrasi yang diuji, yaitu 0-468 NTU.                                     |
-| ADC lebih dari 1084 | Rumus masih dapat menghitung nilai, tetapi hasil adalah estimasi di luar rentang kalibrasi.           |
-| ADC 4095 atau 0     | Periksa kabel, sensor, dan rangkaian karena dapat mengindikasikan kondisi jenuh, putus, atau korslet. |
+| Kondisi             | Perlakuan yang benar                                                                                      |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| ADC kurang dari 710 | Hasil dijepit ke 0 NTU, tetapi berada di bawah rentang data pembanding.                                   |
+| ADC 710 sampai 1084 | Berada dalam rentang ADC yang diuji terhadap Lab Bante, dengan RMSE gabungan 34,198 NTU.                  |
+| ADC lebih dari 1084 | Rumus masih dapat menghitung nilai, tetapi hasil merupakan ekstrapolasi dan belum diverifikasi Lab Bante. |
+| ADC 0 atau 4095     | Periksa sensor, kabel, dan rangkaian ADC karena dapat mengindikasikan putus, korslet, atau kondisi jenuh. |
 
-Contoh: ADC `1200` menghasilkan sekitar `613 NTU` secara matematis. Nilai tersebut tidak boleh diklaim terkalibrasi sebelum dibandingkan kembali dengan Lab Bante pada rentang sekitar `500-650 NTU`.
+Contoh: ADC `1200` menghasilkan sekitar `561,78 NTU` secara matematis. Nilai tersebut tidak boleh diklaim terkalibrasi sebelum dibandingkan dengan Lab Bante pada rentang tersebut.
 
 ## 9. Cara Memperbarui Kalibrasi
 
-File `kalibrasi_turbidity.py` menghitung ulang regresi dari data yang tersedia. Masukkan pasangan data baru pada list berikut:
+Data yang digunakan dalam regresi ini dapat direpresentasikan sebagai berikut:
 
 ```python
-ADC = [710, 718, 726, 732, 742, 748, 852, 1084]
-NTU_LAB_BANTE = [0.00, 9.44, 19.47, 28.97, 38.72, 47.45, 177.30, 468.00]
+ADC = [710, 718, 726, 732, 742, 748, 754, 779, 788, 790, 795.5,
+       797, 821, 832, 852, 877, 1084]
+NTU_LAB_BANTE = [0.00, 9.44, 19.47, 28.97, 38.72, 47.45, 16.26,
+                 34.43, 32.28, 24.00, 40.44, 18.22, 59.98, 87.22,
+                 177.30, 150.90, 468.00]
 ```
 
-Satu indeks harus selalu berasal dari sampel yang sama. Setelah data ditambahkan, jalankan:
+Satu indeks ADC harus selalu berasal dari sampel yang sama dengan indeks NTU Lab Bante. Data duplikat tidak boleh dimasukkan kembali kecuali merupakan pengukuran ulang yang independen dan memang sengaja ingin diberi bobot tambahan.
 
-```text
-python kalibrasi_turbidity.py
-```
-
-Untuk menghitung tanpa membuka grafik, misalnya saat verifikasi melalui terminal, jalankan:
-
-```text
-python kalibrasi_turbidity.py --no-plot
-```
-
-Program akan menampilkan nilai slope, intercept, `R^2`, RMSE, residual per titik, dan koefisien baru untuk firmware. Salin hasilnya ke konstanta `TURBIDITY_SLOPE` dan `TURBIDITY_INTERCEPT` di `main/config.h`.
-
-Untuk kalibrasi versi berikutnya, ambil minimal tiga sampai lima pembacaan ADC yang stabil pada setiap larutan, lalu gunakan rata-rata ADC. Prioritaskan titik yang belum padat, misalnya `75-100 NTU`, `125-150 NTU`, `250-300 NTU`, serta `500-650 NTU` bila alat akan digunakan di atas 468 NTU.
+Untuk kalibrasi berikutnya, ambil minimal tiga sampai lima pembacaan ADC stabil untuk setiap larutan dan gunakan nilai rata-ratanya. Prioritaskan pengukuran ulang pada rentang yang saat ini paling bervariasi, yaitu sekitar `15-180 NTU`.
 
 ## 10. Jawaban Ringkas untuk Sidang
 
 **Mengapa memakai ADC, bukan volt?**
 
-Karena ADC adalah nilai asli yang dibaca STM32. Konversi ke volt tidak menambah informasi dan dapat menambah galat pembulatan. Tegangan referensi 3,3 V tetap penting karena menentukan skala ADC dan memastikan input PA1 aman.
+Karena ADC adalah nilai asli yang dibaca STM32. Konversi ke volt tidak menambah informasi untuk regresi dan dapat menambah galat pembulatan.
 
 **Mengapa memakai regresi linear?**
 
-Karena delapan titik menunjukkan hubungan ADC dan NTU yang sangat linear (`R^2 = 0,999976`). Regresi menggunakan seluruh titik, sehingga lebih representatif daripada memilih hanya dua titik. Model polynomial tidak dipakai karena titik data masih terbatas dan polynomial lebih mudah mengikuti noise atau menghasilkan perilaku tidak realistis di luar data.
+Regresi linear menghasilkan satu persamaan yang memakai seluruh 17 pasangan data unik. Hasilnya menunjukkan hubungan positif ADC-NTU, tetapi data gabungan masih bervariasi, sehingga hasil harus disampaikan bersama nilai `R2 = 0,901655` dan `RMSE = 34,198 NTU`.
 
-**Dari mana slope dan intercept berasal?**
+**Mengapa Full Aquades tidak digunakan?**
 
-Dari perhitungan kuadrat terkecil terhadap seluruh pasangan `ADC alat` dan `NTU Lab Bante`. Script Python proyek menghitungnya otomatis dengan rumus slope dan intercept pada Bagian 4.1.
+Titik `916 ADC = 0,00 NTU` tidak sejalan dengan titik air jernih lain pada data gabungan. Titik tersebut diperlakukan sebagai anomali dan dikeluarkan agar tidak mendistorsi regresi.
 
-**Apakah alat bisa membaca di atas 468 NTU?**
+**Mengapa data yang sama dari dua sumber tidak dihitung dua kali?**
 
-Firmware dapat menghitung nilai di atas 468 NTU, tetapi nilai tersebut adalah ekstrapolasi. Klaim kalibrasi saat ini dibatasi pada 0-468 NTU sampai ada pembanding Lab Bante pada rentang yang lebih tinggi.
+Pasangan `852 ADC = 177,30 NTU` dan `1084 ADC = 468,00 NTU` adalah data yang sama pada kedua sumber. Menghitungnya dua kali akan memberi bobot ganda pada satu pengukuran tanpa menambah bukti baru.
 
-**Apa keterbatasan penelitian ini?**
+**Apa keterbatasan kalibrasi ini?**
 
-Setiap titik data saat ini belum memiliki pengulangan yang cukup untuk menghitung repeatability. Karena itu, hasil ini tepat disebut kalibrasi awal atau kalibrasi versi 1, bukan validasi akhir seluruh rentang sensor.
+Setiap titik belum memiliki pengulangan yang cukup untuk menghitung repeatability. Variasi antar data menyebabkan galat prediksi masih besar, sehingga kalibrasi ini tepat disebut kalibrasi gabungan awal dan perlu pengukuran ulang yang lebih terkontrol.
