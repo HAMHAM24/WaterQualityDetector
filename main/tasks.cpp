@@ -147,7 +147,7 @@ static void taskSerialDebug(void* /* pvParameters */) {
     const TickType_t period = pdMS_TO_TICKS(TASK_PERIOD_SERIAL_DEBUG_MS);
 
     static const char* const menuNames[] = {
-        "BOOT_ANIMATION", "SPLASH", "HOME", "INPUT_AMBIENT_TEMPERATURE", "WAITING_SAMPLING", "MEASUREMENT",
+        "BOOT_ANIMATION", "SPLASH", "HOME", "INPUT_AMBIENT_TEMPERATURE", "TURBIDITY_SOURCE_MENU", "INPUT_CUSTOM_TURBIDITY", "WAITING_SAMPLING", "MEASUREMENT",
         "CALIBRATION", "CALIBRATION_TDS_MENU", "CALIBRATION_TDS_WIZARD", "TDS_MONITOR",
         "TURBIDITY_MONITOR",
         "CALIBRATION_TEMPERATURE_MENU", "CALIBRATION_TEMPERATURE_WIZARD", "TEMPERATURE_MONITOR",
@@ -162,6 +162,8 @@ static void taskSerialDebug(void* /* pvParameters */) {
         memset(buttonSnapshot, 0, sizeof(buttonSnapshot));
 
         MenuState menuSnapshot = MenuState::SPLASH;
+        bool useCustomTurbidity = false;
+        float customTurbidity = 0.0f;
 
         if (xSemaphoreTake(g_dataMutex, DATA_MUTEX_TIMEOUT) == pdTRUE) {
             sensorSnapshot = g_sensorData;
@@ -169,6 +171,8 @@ static void taskSerialDebug(void* /* pvParameters */) {
                 buttonSnapshot[i] = g_buttonStates[i];
             }
             menuSnapshot = g_systemState.currentMenu;
+            useCustomTurbidity = g_systemState.useCustomTurbidity;
+            customTurbidity = g_systemState.customTurbidity;
             xSemaphoreGive(g_dataMutex);
         }
 
@@ -189,6 +193,14 @@ static void taskSerialDebug(void* /* pvParameters */) {
         Serial.print(sensorSnapshot.turbidityAdcFiltered, 1);
         Serial.print(F(" / "));
         Serial.println(sensorSnapshot.turbidityFiltered);
+
+        Serial.print(F("Turbidity Fuzzy : "));
+        if (useCustomTurbidity) {
+            Serial.print(customTurbidity, 1);
+            Serial.println(F(" NTU (CUSTOM/UJI)"));
+        } else {
+            Serial.println(F("Sensor Asli"));
+        }
 
         Serial.print(F("TDS Comp      : "));
         Serial.println(sensorSnapshot.tdsCompensated);

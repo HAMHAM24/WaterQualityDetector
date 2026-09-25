@@ -195,7 +195,7 @@ $$z = 1.0 - \frac{\text{Severity}}{3}$$
 
 Kombinasi $4 \times 4 \times 4 = 64$ aturan inferensi yang diterapkan pada `kualitas_air.fis` dan `fuzzy_kualitas_air.c`:
 
-| No | Suhu ($\Delta T$) | TDS | Turbidity | Output Kualitas Air | Singleton $z$ |
+| No | TDS | Turbidity | Suhu ($\Delta T$) | Output Kualitas Air | Singleton $z$ |
 |:---:|:---:|:---:|:---:|:---|:---:|
 | **R1** | SL | SL | SL | Sangat Layak | $1.00$ |
 | **R2** | SL | SL | PS | Perlu Proses Sedang | $0.67$ |
@@ -266,8 +266,10 @@ Kombinasi $4 \times 4 \times 4 = 64$ aturan inferensi yang diterapkan pada `kual
 
 #### E. Defuzzifikasi Weighted Average & Ambang Batas Klasifikasi
 
-Nilai keluaran tegas (*crisp output*) $Z$ dihitung dengan metode *Weighted Average*:
-$$Z = \frac{\sum_{i=1}^{64} w_i \times z_i}{\sum_{i=1}^{64} w_i}, \quad w_i = \min(\mu_{\text{TDS}, i}, \mu_{\text{Turb}, i}, \mu_{\Delta T, i})$$
+Setiap rule memakai firing strength $w_i = \min(\mu_{\text{TDS},i}, \mu_{\text{Turb},i}, \mu_{\Delta T,i})$. Pada sistem Sugeno, `wtaver` menghitung seluruh rule aktif secara langsung:
+$$Z = \frac{\sum_{i=1}^{64} w_i z_i}{\sum_{i=1}^{64} w_i}$$
+
+Properti `AggMethod='max'` tetap dipertahankan pada file FIS, tetapi tidak menggabungkan rule yang memiliki singleton sama sebelum `wtaver`; keluaran Sugeno dibentuk dari pasangan bobot-konsekuen setiap rule.
 
 Skor akhir $Z$ ($0.00 - 1.00$) diklasifikasikan ke dalam 4 tingkatan status mutu:
 
@@ -280,6 +282,8 @@ Skor akhir $Z$ ($0.00 - 1.00$) diklasifikasikan ke dalam 4 tingkatan status mutu
 
 #### F. Compliance Hard Gate (Pengunci Permenkes No. 2/2023):
 $$\text{Jika } (\text{TDS} \ge 300\text{ mg/L}) \lor (\text{Turbidity} \ge 3.0\text{ NTU}) \lor (\Delta T > 3.0^\circ\text{C}) \implies \text{Status} = \text{T.LOLOS}, \ Z = 0.00$$
+
+Firmware juga menerapkan prinsip **fail-closed**: sensor suhu, TDS, atau Turbidity yang berstatus `ERROR` membuat hasil akhir `T.LOLOS`. Pengecualian hanya berlaku pada mode uji Turbidity custom yang sengaja menggantikan input sensor Turbidity; suhu dan TDS tetap wajib valid. Hard gate dan validasi sensor ini merupakan lapisan kepatuhan setelah keluaran FIS dihitung.
 
 ---
 
@@ -296,11 +300,12 @@ Misal sampel air diuji dengan kondisi:
 - $\Delta T = 1.5^\circ\text{C}$: $\mu_{\text{SL}} = 0, \quad \mu_{\text{PS}} = \frac{1.5 - 1.0}{1.75 - 1.0} = 0.667, \quad \mu_{\text{PI}} = 0, \quad \mu_{\text{TL}} = 0$
 
 **Langkah 2: Evaluasi Aturan Aktif**
-- **R21** (PS Suhu, PS TDS, SL Turb) $\rightarrow w_{21} = \min(0.667, 0.667, 0.333) = 0.333 \implies z_{21} = 0.67$
-- **R22** (PS Suhu, PS TDS, PS Turb) $\rightarrow w_{22} = \min(0.667, 0.667, 0.667) = 0.667 \implies z_{22} = 0.67$
+- Dengan urutan input FIS `TDS, Turbidity, DeltaSuhu`, rule aktif adalah R2, R6, R18, dan R22.
+- Keempatnya memiliki konsekuen `PS` ($z=0.67$), dengan firing strength masing-masing $0.333$, $0.333$, $0.333$, dan $0.667$.
+- Seluruh firing strength tetap masuk ke perhitungan `wtaver`.
 
 **Langkah 3: Defuzzifikasi**
-$$Z = \frac{(0.333 \times 0.67) + (0.667 \times 0.67)}{0.333 + 0.667} = \frac{0.223 + 0.447}{1.000} = 0.67$$
+$$Z = \frac{(0.333+0.333+0.333+0.667)\times0.67}{0.333+0.333+0.333+0.667}=0.67$$
 
 **Langkah 4: Keputusan Akhir**
 - $Z = 0.67$ berada pada rentang $0.50 \le Z < 0.83 \implies$ **`P.SED` (Perlu Proses Sedang)**.
@@ -317,11 +322,11 @@ Berdasarkan Permenkes No. 2/2023 Tabel 10 dan standar kolam renang:
 
 ---
 
-### 8.3. Kalibrasi Turbidity Regresi ADC
-Turbidity dikonversi dari ADC moving average STM32 menggunakan koefisien hasil regresi linear terhadap referensi Lab Bante:
-$$\text{NTU} = (1{,}251645 \times \text{ADC}) - 888{,}878830$$
+### 8.3. Kalibrasi Turbidity Model ADC Sementara
+Turbidity dikonversi dari ADC moving average STM32 dengan model bertahap: ADC sampai `1692` menghasilkan `0 NTU`, ADC `1692-1709` diinterpolasi dari `0` sampai `1,30 NTU`, lalu ADC di atas atau sama dengan `1709` meneruskan slope regresi estimasi:
+$$\text{NTU} = (0{,}514082 \times \text{ADC}) - 877{,}266138, \quad \text{untuk ADC} \ge 1709$$
 
-Kalibrasi tervalidasi pada ADC `710-1084` atau `0-468 NTU`. Di atas rentang tersebut firmware tetap menghitung NTU, tetapi menandainya sebagai estimasi. Detail metode regresi tersedia pada [`kalibrasiturbidy.md`](kalibrasiturbidy.md).
+Titik `1692 -> 0 NTU` dan `1709 -> 1,30 NTU` adalah asumsi untuk air kran, bukan pembacaan Lab Bante. Firmware branch `special` memakai rentang estimasi `1692-2552`; rentang `710-1084` tetap catatan data ukur lama. Detail data asli tersedia pada [`kalibrasiturbidy.md`](kalibrasiturbidy.md), sedangkan model sementara tersedia pada [`kalibrasi_turbidity_estimasi.md`](kalibrasi_turbidity_estimasi.md).
 
 ---
 
@@ -420,7 +425,7 @@ Sistem memverifikasi kestabilan suhu probe DS18B20 ($3\times$ sampel variasi $\l
 | Air:31.0C dT:3.0                                  |
 | TDS  : 280.0 ppm                                  |
 | Turb : 1.5 NTU                                    |
-| Skor : 0.67 [P.SED]                               |
+| Skor : 0.33 [P.INT]                               |
 |---------------------------------------------------|
 | DN:Detail                               BACK:Menu |
 +---------------------------------------------------+
@@ -519,9 +524,9 @@ Sistem memisahkan secara tegas antara **Live Monitor** dan **Kalibrasi** untuk T
 - **`ppm`** : *Parts per million* (satuan konsentrasi TDS, setara mg/L).
 - **`NTU`** : *Nephelometric Turbidity Unit* (satuan kekeruhan air).
 - **`Stat`** : Status validitas nilai turbidity, bukan status kelayakan air/Fuzzy.
-- **`TERKALIBRASI`** : ADC berada pada rentang data Lab Bante `710-1084`.
-- **`BAWAH RENTANG`** : ADC lebih kecil dari `710`; nilai NTU dijepit ke 0.
-- **`ESTIMASI >468`** : ADC lebih besar dari `1084`; belum diverifikasi Lab Bante.
+- **`TERKALIBRASI`** : Label firmware untuk ADC pada rentang model estimasi `1692-2552`; rentang ini belum diverifikasi melalui pengukuran ulang.
+- **`BAWAH RENTANG`** : ADC lebih kecil dari `1692`; outputnya 0 NTU.
+- **`ESTIMASI >468`** : ADC lebih besar dari `2552`; berada di atas rentang koreksi estimasi dan belum diverifikasi Lab Bante.
 - **`dT`** : Deviasi/selisih suhu ($|\text{Suhu Air} - \text{Suhu Udara}|$).
 - **`SL`** : Sangat Layak (kategori mutu air tertinggi).
 - **`PS`** : Perlu Proses Sedang.
@@ -583,7 +588,7 @@ TDS dan Suhu memiliki sub-menu kalibrasi interaktif dan Live Monitor:
 |---------------------------------------------------|
 | ADC   : 852                                       |
 | Volt  : 0.69 V                                    |
-| NTU   : 177.5                                     |
+| NTU   : 140.5                                     |
 | Stat  : TERKALIBRASI                              |
 |---------------------------------------------------|
 |                                         BACK:Menu |
@@ -727,10 +732,11 @@ Saat perangkat dinyalakan, fungsi `setup()` di `main.ino` mengeksekusi uji coba 
     VALIDASI AUTOMATIS FIRMWARE         
 ========================================
 Air Minum (Ideal)     : 1.00 [S.LAYAK]
-Air Minum (1 Batas)   : 0.67 [P.SED]
+Air Minum (1 Batas)   : 0.56 [P.SED] PASS
+FIS 64 rule           : PASS
 Pemandian (28C, 0.3NTU): [LAYAK]
 Pemandian (28C, 2.5NTU): [TDK LAYAK]
-Turb regresi (ADC 852): 177.5 NTU
+ADC 852.0 -> 140.54 NTU : PASS
 ========================================
 ```
 
@@ -758,8 +764,8 @@ Turb regresi (ADC 852): 177.5 NTU
 1. Masuk ke **Menu Utama** $\rightarrow$ **Kalibrasi Sensor** $\rightarrow$ **Turbidity**. Alat langsung menampilkan Live Monitor.
 2. Celupkan sensor ke sampel dan tunggu ADC stabil. Catat ADC yang tampil bersama nilai NTU dari Lab Bante untuk sampel yang sama.
 3. Masukkan semua pasangan data ke `kalibrasi_turbidity.py`, lalu jalankan `python kalibrasi_turbidity.py`.
-4. Salin koefisien `TURBIDITY_SLOPE` dan `TURBIDITY_INTERCEPT` ke `main/config.h`, kemudian build dan upload firmware.
-5. Status `TERKALIBRASI` berarti ADC berada pada rentang pengujian `710-1084` atau `0-468 NTU`; `ESTIMASI >468` berarti hasil belum terverifikasi Lab Bante.
+4. Untuk regresi baru hasil pengukuran ulang, perbarui konstanta model di `main/config.h`, periksa self-test, kemudian build dan upload firmware. Jangan mengganti model bertahap branch `special` hanya dengan dua koefisien karena model itu juga memakai batas `1692` dan `1709`.
+5. Pada branch `special`, status `TERKALIBRASI` menandai ADC dalam rentang model estimasi `1692-2552`, bukan validasi pengukuran ulang. Rentang ukur lama `710-1084` tetap terdokumentasi di `kalibrasiturbidy.md`.
 
 ---
 

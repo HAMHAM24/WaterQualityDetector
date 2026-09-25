@@ -78,13 +78,16 @@ constexpr uint16_t TDS_CALIB_TARGET_STEP    = 1;   // increment/decrement +- 1 p
 // =============================================================================
 // KALIBRASI SENSOR TURBIDITY
 // =============================================================================
-// Regresi 17 pasangan unik pada kalibrasiturbidy.md; Sampel 6 memakai ADC 795.5.
-// R^2 = 0.901655, RMSE = 34.198 NTU pada data fitting, bukan validasi independen.
-// Kenaikan 1 ADC setara sekitar 1.21 NTU sebelum penjepitan negatif.
-constexpr float TURBIDITY_SLOPE     = 1.210482f;
-constexpr float TURBIDITY_INTERCEPT = -890.794124f;
-constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MIN = 710;
-constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MAX = 1084;
+// Model sementara: ADC lama dikalikan 1671.8 / 710, lalu dipadukan dengan
+// ASUMSI air kran 1692 ADC = 0 NTU dan 1709 ADC = 1.30 NTU.
+// Di atas 1709, pakai slope regresi 17 titik estimasi; bukan regresi ulang.
+constexpr float TURBIDITY_ZERO_ADC = 1692.0f;
+constexpr float TURBIDITY_TAP_ADC = 1709.0f;
+constexpr float TURBIDITY_TAP_NTU = 1.30f;
+constexpr float TURBIDITY_SLOPE     = 0.514082f;
+constexpr float TURBIDITY_INTERCEPT = -877.266138f;
+constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MIN = 1692;
+constexpr uint16_t TURBIDITY_CALIBRATED_ADC_MAX = 2552;
 constexpr float TURBIDITY_CALIBRATED_NTU_MIN = 0.0f;
 constexpr float TURBIDITY_CALIBRATED_NTU_MAX = 468.0f;
 
@@ -132,6 +135,11 @@ constexpr float AMBIENT_TEMP_MIN = 10.0f;
 constexpr float AMBIENT_TEMP_MAX = 45.0f;
 constexpr float AMBIENT_TEMP_FINE_STEP = 0.1f;
 constexpr float AMBIENT_TEMP_COARSE_STEP = 1.0f;
+constexpr float TURBIDITY_CUSTOM_DEFAULT = 0.0f;
+constexpr float TURBIDITY_CUSTOM_MIN = 0.0f;
+constexpr float TURBIDITY_CUSTOM_MAX = 25.0f;
+constexpr float TURBIDITY_CUSTOM_FINE_STEP = 0.1f;
+constexpr float TURBIDITY_CUSTOM_COARSE_STEP = 1.0f;
 constexpr float TEMP_STABLE_DELTA_C = 0.2f;
 constexpr uint8_t TEMP_STABLE_REQUIRED_SAMPLES = 3;
 constexpr uint32_t TEMP_STABILIZATION_TIMEOUT_MS = 60000;
@@ -144,9 +152,9 @@ constexpr uint32_t TEMP_STABILIZATION_TIMEOUT_MS = 60000;
 //   - Turbidity: < 0.5 NTU (Standar kejernihan air kolam renang)
 //   - TDS: Tidak dievaluasi (bypass), nilai tetap ditampilkan di OLED
 // =============================================================================
-constexpr float PEMANDIAN_KOLAM_SUHU_MIN = 16.0f;  // Batas minimum suhu aman
-constexpr float PEMANDIAN_KOLAM_SUHU_MAX = 35.0f;  // Batas maksimum suhu aman
-constexpr float PEMANDIAN_KOLAM_TURB_MAX = 0.5f;   // Batas maksimum kekeruhan (< 0.5 NTU)
+constexpr float PEMANDIAN_KOLAM_SUHU_MIN = FUZZY_PEMANDIAN_SUHU_MIN;
+constexpr float PEMANDIAN_KOLAM_SUHU_MAX = FUZZY_PEMANDIAN_SUHU_MAX;
+constexpr float PEMANDIAN_KOLAM_TURB_MAX = FUZZY_PEMANDIAN_TURB_MAX;
 
 // =============================================================================
 // DISPLAY OLED 1.3" / 0.96" 128x64

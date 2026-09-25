@@ -20,7 +20,7 @@ Dokumen ini memuat daftar lengkap seluruh pin GPIO yang digunakan pada board **S
 | **10** | **`PB12`** | **Tombol OK** | `INPUT_PULLUP` (Active LOW) | Kaki 1 ke **PB12**, Kaki 2 ke **GND** |
 | **11** | **`PB13`** | **Tombol RIGHT** | `INPUT_PULLUP` (Active LOW) | Kaki 1 ke **PB13**, Kaki 2 ke **GND** |
 | **12** | **`PB14`** | **Tombol UP** | `INPUT_PULLUP` (Active LOW) | Kaki 1 ke **PB14**, Kaki 2 ke **GND** |
-| **13** | **`PB15`** | **Tombol LEFT** | `INPUT_PULLUP` (Active LOW) | Kaki 1 ke **PB15**, Kaki 2 ke **GND** |
+| **13** | **`PB0`** | **Tombol LEFT** | `INPUT_PULLUP` (Active LOW) | Kaki 1 ke **PB0**, Kaki 2 ke **GND** |
 
 ---
 
@@ -32,7 +32,7 @@ Semua tombol menggunakan mode **Active LOW** dengan memanfaatkan internal pull-u
 |:---:|:---:|:---|
 | ⬆️ **UP** | **`PB14`** | Geser kursor ke atas / Tambah target kalibrasi TDS / Kembali ke Dashboard |
 | ⬇️ **DOWN** | **`PA8`** | Geser kursor ke bawah / Kurangi target kalibrasi TDS / Masuk ke Rekomendasi |
-| ⬅️ **LEFT** | **`PB15`** | Kurangi offset suhu (-0.1°C) / Kurangi level kecerahan OLED |
+| ⬅️ **LEFT** | **`PB0`** | Kurangi offset suhu (-0.1°C) / Kurangi level kecerahan OLED |
 | ➡️ **RIGHT** | **`PB13`** | Tambah offset suhu (+0.1°C) / Tambah level kecerahan OLED |
 | 🟢 **OK** | **`PB12`** | Pilih menu / Kunci nilai kalibrasi / Konfirmasi aksi |
 | 🔴 **BACK** | **`PB11`** | Batal proses stabilisasi / Kembali ke menu sebelumnya / Keluar |

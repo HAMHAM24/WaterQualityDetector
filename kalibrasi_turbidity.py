@@ -1,4 +1,4 @@
-"""Hitung kalibrasi sensor turbidity dari ADC STM32 terhadap referensi Lab Bante.
+"""Hitung regresi estimasi turbidity setelah koreksi proporsional ADC lama.
 
 Jalankan:
     python kalibrasi_turbidity.py
@@ -10,13 +10,24 @@ Grafik bersifat opsional dan memerlukan matplotlib:
 import argparse
 from math import sqrt
 
-# Data gabungan unik, diurutkan berdasarkan ADC. Full Aquades anomali
+# Data gabungan unik lama, diurutkan berdasarkan ADC. Full Aquades anomali
 # (916 ADC, 0 NTU) serta pasangan duplikat antarsumber tidak digunakan.
 # Nilai 795.5 adalah titik tengah rentang ADC 791-800 untuk Sampel 6.
-ADC = [
+ADC_LAMA = [
     710, 718, 726, 732, 742, 748, 754, 779, 788, 790, 795.5,
     797, 821, 832, 852, 877, 1084,
 ]
+ADC_AIR_JERNIH_LAMA = 710.0
+ADC_AIR_KRAN_BARU = 1671.8
+FAKTOR_KOREKSI_ADC = ADC_AIR_KRAN_BARU / ADC_AIR_JERNIH_LAMA
+ADC_ESTIMASI = [value * FAKTOR_KOREKSI_ADC for value in ADC_LAMA]
+TURBIDITY_ZERO_ADC = 1692.0
+TURBIDITY_TAP_ADC = 1709.0
+TURBIDITY_TAP_NTU = 1.30
+TURBIDITY_SLOPE_FIRMWARE = 0.514082
+TURBIDITY_INTERCEPT_FIRMWARE = (
+    TURBIDITY_TAP_NTU - TURBIDITY_SLOPE_FIRMWARE * TURBIDITY_TAP_ADC
+)
 NTU_LAB_BANTE = [
     0.00, 9.44, 19.47, 28.97, 38.72, 47.45, 16.26, 34.43, 32.28,
     24.00, 40.44, 18.22, 59.98, 87.22, 177.30, 150.90, 468.00,
@@ -56,26 +67,56 @@ def linear_regression(x, y):
     return slope, intercept, r_squared, rmse, predictions, residuals
 
 
+def firmware_model(adc):
+    """Model sementara firmware dengan asumsi air kran, bukan regresi baru."""
+    if adc <= TURBIDITY_ZERO_ADC:
+        return 0.0
+    if adc < TURBIDITY_TAP_ADC:
+        return TURBIDITY_TAP_NTU * (adc - TURBIDITY_ZERO_ADC) / (
+            TURBIDITY_TAP_ADC - TURBIDITY_ZERO_ADC
+        )
+    return TURBIDITY_TAP_NTU + TURBIDITY_SLOPE_FIRMWARE * (
+        adc - TURBIDITY_TAP_ADC
+    )
+
+
 def print_results(slope, intercept, r_squared, rmse, predictions, residuals):
-    print("=== HASIL KALIBRASI TURBIDITY ===")
+    print("=== HASIL REGRESI TURBIDITY KOREKSI ESTIMASI ===")
+    print(f"Faktor koreksi ADC = {ADC_AIR_KRAN_BARU} / {ADC_AIR_JERNIH_LAMA} "
+          f"= {FAKTOR_KOREKSI_ADC:.9f}")
+    print("PERINGATAN: ADC hasil koreksi bukan data pengukuran ulang.")
     print(f"NTU = ({slope:.6f} * ADC) + ({intercept:.6f})")
     print(f"R^2  = {r_squared:.6f}")
     print(f"RMSE = {rmse:.3f} NTU")
-    print(f"Rentang data: ADC {min(ADC):.0f}-{max(ADC):.0f}, "
+    print(f"Rentang estimasi: ADC {min(ADC_ESTIMASI):.2f}-{max(ADC_ESTIMASI):.2f}, "
           f"NTU {min(NTU_LAB_BANTE):.2f}-{max(NTU_LAB_BANTE):.2f}")
     print()
-    print("=== KOEFISIEN UNTUK STM32 ===")
-    print(f"#define TURBIDITY_SLOPE      {slope:.6f}f")
-    print(f"#define TURBIDITY_INTERCEPT  {intercept:.6f}f")
+    print("=== REGRESI 17 TITIK (RIWAYAT ESTIMASI) ===")
+    print(f"NTU = ({slope:.6f} * ADC) + ({intercept:.6f})")
+    print()
+    print("=== MODEL SEMENTARA FIRMWARE ===")
+    print(f"ADC <= {TURBIDITY_ZERO_ADC:.0f}: 0.00 NTU")
+    print(f"ADC {TURBIDITY_ZERO_ADC:.0f}-{TURBIDITY_TAP_ADC:.0f}: "
+          f"interpolasi 0.00-{TURBIDITY_TAP_NTU:.2f} NTU")
+    print(f"ADC >= {TURBIDITY_TAP_ADC:.0f}: "
+          f"({TURBIDITY_SLOPE_FIRMWARE:.6f} * ADC) + "
+          f"({TURBIDITY_INTERCEPT_FIRMWARE:.6f})")
+    print("Konstanta firmware:")
+    print(f"constexpr float TURBIDITY_SLOPE = {TURBIDITY_SLOPE_FIRMWARE:.6f}f;")
+    print(f"constexpr float TURBIDITY_INTERCEPT = {TURBIDITY_INTERCEPT_FIRMWARE:.6f}f;")
+    print("PERINGATAN: titik 1692 dan 1709 adalah asumsi air kran.")
     print()
     print("=== DETAIL TITIK ===")
-    print(" ADC | Lab Bante | Prediksi | Error (Lab - Prediksi)")
-    print("-----+-----------+----------+-----------------------")
-    for adc, actual, predicted, residual in zip(
-        ADC, NTU_LAB_BANTE, predictions, residuals
+    print("ADC lama | ADC estimasi | Lab Bante | Model FW | Error (Lab - Model)")
+    print("---------+--------------+-----------+----------+--------------------")
+    for adc_lama, adc_estimasi, actual in zip(
+        ADC_LAMA, ADC_ESTIMASI, NTU_LAB_BANTE
     ):
+        firmware_prediction = firmware_model(adc_estimasi)
+        firmware_residual = actual - firmware_prediction
         print(
-            f"{adc:4.0f} | {actual:9.2f} | {predicted:8.2f} | {residual:+21.2f}"
+            f"{adc_lama:8.1f} | {adc_estimasi:12.2f} | {actual:9.2f} | "
+            f"{firmware_prediction:8.2f} | {firmware_residual:+19.2f}"
         )
 
 
@@ -87,31 +128,35 @@ def show_plots(slope, intercept, r_squared, predictions, residuals):
         print("Pasang dengan: pip install matplotlib")
         return
 
-    x_min, x_max = min(ADC), max(ADC)
+    x_min, x_max = min(ADC_ESTIMASI), max(ADC_ESTIMASI)
     line_adc = [x_min + (x_max - x_min) * index / 200 for index in range(201)]
-    line_ntu = [slope * value + intercept for value in line_adc]
+    line_ntu = [firmware_model(value) for value in line_adc]
 
     plt.figure(figsize=(9, 5))
-    plt.scatter(ADC, NTU_LAB_BANTE, color="navy", label="Referensi Lab Bante")
+    plt.scatter(ADC_ESTIMASI, NTU_LAB_BANTE, color="navy", label="ADC koreksi estimasi")
     plt.plot(
         line_adc,
         line_ntu,
         color="crimson",
-        label=f"NTU = {slope:.4f} ADC {intercept:+.4f}\nR^2 = {r_squared:.6f}",
+        label="Model sementara firmware",
     )
-    plt.xlabel("ADC mentah STM32")
+    plt.xlabel("ADC STM32 hasil koreksi estimasi")
     plt.ylabel("Turbidity Lab Bante (NTU)")
-    plt.title("Kalibrasi Sensor Turbidity")
+    plt.title("Model Sementara Sensor Turbidity")
     plt.grid(True, alpha=0.3)
     plt.legend()
     plt.tight_layout()
 
     plt.figure(figsize=(9, 4))
     plt.axhline(0, color="black", linewidth=1)
-    plt.scatter(ADC, residuals, color="darkorange")
-    plt.xlabel("ADC mentah STM32")
+    firmware_residuals = [
+        actual - firmware_model(adc)
+        for adc, actual in zip(ADC_ESTIMASI, NTU_LAB_BANTE)
+    ]
+    plt.scatter(ADC_ESTIMASI, firmware_residuals, color="darkorange")
+    plt.xlabel("ADC STM32 hasil koreksi estimasi")
     plt.ylabel("Error: Lab Bante - Prediksi (NTU)")
-    plt.title("Residual Kalibrasi")
+    plt.title("Residual Model Sementara")
     plt.grid(True, alpha=0.3)
     plt.tight_layout()
     plt.show()
@@ -119,7 +164,7 @@ def show_plots(slope, intercept, r_squared, predictions, residuals):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Hitung regresi kalibrasi turbidity ADC STM32 terhadap Lab Bante."
+        description="Hitung regresi estimasi turbidity dari koreksi proporsional ADC lama."
     )
     parser.add_argument(
         "--no-plot",
@@ -128,7 +173,7 @@ def main():
     )
     args = parser.parse_args()
 
-    result = linear_regression(ADC, NTU_LAB_BANTE)
+    result = linear_regression(ADC_ESTIMASI, NTU_LAB_BANTE)
     print_results(*result)
     if not args.no_plot:
         slope, intercept, r_squared, _rmse, predictions, residuals = result

@@ -73,6 +73,7 @@ bool globals_init() {
     g_systemState.measurementSubPage = 0;
     g_systemState.aboutSubPage       = 0;
     g_systemState.ambientTemperature = AMBIENT_TEMP_DEFAULT;
+    g_systemState.customTurbidity    = TURBIDITY_CUSTOM_DEFAULT;
     g_systemState.temperatureDelta   = 0.0f;
     g_systemState.stabilizationCount = 0;
     g_systemState.stabilizationTimedOut = false;
@@ -82,6 +83,9 @@ bool globals_init() {
     g_systemState.settingsBrightness = g_calibParams.displayBrightness;
     g_systemState.settingsContrast   = g_calibParams.displayContrast;
     g_systemState.settingsAdjustMode = false;
+    g_systemState.fuzzyTestMenuUnlocked = false;
+    g_systemState.useCustomTurbidity = false;
+    g_systemState.fuzzyTestUnlockProgress = 0;
     g_systemState.systemOK           = true;
     g_systemState.displayDirty       = true; // gambar pertama kali wajib terjadi
 

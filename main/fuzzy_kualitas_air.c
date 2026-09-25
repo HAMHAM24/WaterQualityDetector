@@ -33,34 +33,38 @@ float FuzzyKualitasAir_HitungSkor_AirMinum(const FuzzyProfil_t* p, float tds,
     if (deltaSuhu < 0.0f) deltaSuhu = 0.0f; if (deltaSuhu > p->tempMax) deltaSuhu = p->tempMax;
 
     /* Hitung derajat keanggotaan masing-masing input pada empat kategori. */
-    const float mt[4] = {
+    const float mTds[4] = {
         trapmf(tds, 0, 0, p->tdsSl_b, p->tdsSl_c),
         trimf(tds, p->tdsPs_a, p->tdsPs_b, p->tdsPs_c),
         trimf(tds, p->tdsPi_a, p->tdsPi_b, p->tdsPi_c),
         trapmf(tds, p->tdsTl_a, p->tdsTl_b, p->tdsMax, p->tdsMax)
     };
-    const float mb[4] = {
+    const float mTurb[4] = {
         trapmf(turbidity, 0, 0, p->turbSl_b, p->turbSl_c),
         trimf(turbidity, p->turbPs_a, p->turbPs_b, p->turbPs_c),
         trimf(turbidity, p->turbPi_a, p->turbPi_b, p->turbPi_c),
         trapmf(turbidity, p->turbTl_a, p->turbTl_b, p->turbMax, p->turbMax)
     };
-    const float ms[4] = {
+    const float mTemp[4] = {
         trapmf(deltaSuhu, 0, 0, p->tempSl_b, p->tempSl_c),
         trimf(deltaSuhu, p->tempPs_a, p->tempPs_b, p->tempPs_c),
         trimf(deltaSuhu, p->tempPi_a, p->tempPi_b, p->tempPi_c),
         trapmf(deltaSuhu, p->tempTl_a, p->tempTl_b, p->tempMax, p->tempMax)
     };
 
-    /* Agregasikan 64 rule dengan operator MIN dan metode weighted average. */
+    /* Sesuai Sugeno wtaver pada FIS: semua firing strength rule dibobotkan. */
     float weighted = 0.0f, total = 0.0f;
-    for (uint8_t s = 0; s < 4; ++s) for (uint8_t t = 0; t < 4; ++t)
-    for (uint8_t b = 0; b < 4; ++b) {
+    /* Urutan rule kanonik: TDS, Turbidity, Delta Suhu (sesuai file FIS). */
+    for (uint8_t t = 0; t < 4; ++t) for (uint8_t b = 0; b < 4; ++b)
+    for (uint8_t s = 0; s < 4; ++s) {
         /* Kekuatan rule ditentukan oleh derajat keanggotaan terendah. */
-        float w = mt[t]; if (mb[b] < w) w = mb[b]; if (ms[s] < w) w = ms[s];
+        float w = mTds[t];
+        if (mTurb[b] < w) w = mTurb[b];
+        if (mTemp[s] < w) w = mTemp[s];
         /* Parameter dengan severity tertinggi menjadi pembatas hasil rule. */
         uint8_t worst = t > b ? t : b; if (s > worst) worst = s;
-        weighted += w * outputForSeverity(worst); total += w;
+        weighted += w * outputForSeverity(worst);
+        total += w;
     }
     /* Hindari pembagian nol jika tidak ada rule yang aktif. */
     return total > 0.0f ? weighted / total : 0.0f;
@@ -121,8 +125,9 @@ StatusSuhu_t FuzzyKualitasAir_CekStatusSuhu(float d, const FuzzyProfil_t* p) {
 ThresholdResult_t Threshold_CekPemandianKolam(float suhu, float turbidity) {
     ThresholdResult_t r;
     /* Mode pemandian memakai pemeriksaan ambang langsung, bukan fuzzy. */
-    r.suhuAman = suhu >= 16.0f && suhu <= 35.0f;
-    r.turbidityAman = turbidity < 0.5f;
+    r.suhuAman = suhu >= FUZZY_PEMANDIAN_SUHU_MIN &&
+                 suhu <= FUZZY_PEMANDIAN_SUHU_MAX;
+    r.turbidityAman = turbidity < FUZZY_PEMANDIAN_TURB_MAX;
     r.semuaAman = r.suhuAman && r.turbidityAman;
     return r;
 }

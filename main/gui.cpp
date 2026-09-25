@@ -50,14 +50,34 @@ static const char* const SETTINGS_ITEMS[] = {
     "Brightness",
     "Kontras",
     "Reset Pengaturan",
-    "Informasi Firmware"
+    "Informasi Firmware",
+    "Mode Uji Fuzzy"
 };
 static constexpr uint8_t SETTINGS_ITEM_COUNT = 4;
+static constexpr uint8_t SETTINGS_ITEM_COUNT_UNLOCKED = 5;
 
 static constexpr uint8_t SETTINGS_IDX_BRIGHTNESS = 0;
 static constexpr uint8_t SETTINGS_IDX_CONTRAST   = 1;
 static constexpr uint8_t SETTINGS_IDX_RESET      = 2;
 static constexpr uint8_t SETTINGS_IDX_INFO       = 3;
+static constexpr uint8_t SETTINGS_IDX_FUZZY_TEST = 4;
+
+static const char* const TURBIDITY_SOURCE_ITEMS[] = {
+    "Sensor Asli",
+    "Nilai Custom NTU"
+};
+static constexpr uint8_t TURBIDITY_SOURCE_ITEM_COUNT = 2;
+
+static const ButtonID FUZZY_TEST_UNLOCK_SEQUENCE[] = {
+    ButtonID::OK,
+    ButtonID::RIGHT,
+    ButtonID::LEFT,
+    ButtonID::OK,
+    ButtonID::RIGHT,
+    ButtonID::LEFT
+};
+static constexpr uint8_t FUZZY_TEST_UNLOCK_LENGTH =
+    sizeof(FUZZY_TEST_UNLOCK_SEQUENCE) / sizeof(FUZZY_TEST_UNLOCK_SEQUENCE[0]);
 
 // Pewaktu berbasis milidetik sejak boot
 static uint32_t s_bootAnimStartTick = 0;
@@ -509,6 +529,28 @@ static void drawAmbientTemperatureInput() {
     display_drawStatusBar("OK:Mulai", "BACK:Batal");
 }
 
+static void drawTurbiditySourceMenu() {
+    const uint8_t count = s_viewState.fuzzyTestMenuUnlocked
+                              ? TURBIDITY_SOURCE_ITEM_COUNT : 1;
+    drawSimpleList("Sumber Turbidity", TURBIDITY_SOURCE_ITEMS, count,
+                   s_viewState.cursorIndex);
+    display_drawStatusBar("OK:Pilih", "BACK:Suhu");
+}
+
+static void drawCustomTurbidityInput() {
+    display_drawHeader("Custom NTU (Uji)");
+    g_u8g2.setFont(u8g2_font_6x10_tf);
+    char value[10];
+    char line[32];
+    dtostrf(s_viewState.customTurbidity, 4, 1, value);
+    char* p = value; while (*p == ' ') ++p;
+    snprintf(line, sizeof(line), "Turb: [ %s NTU ]", p);
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y, line);
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + MENU_LINE_HEIGHT, "UP/DN: +/-0.1");
+    g_u8g2.drawStr(2, MENU_FIRST_LINE_Y + 2 * MENU_LINE_HEIGHT, "LF/RT: +/-1.0");
+    display_drawStatusBar("OK:Gunakan", "BACK:Batal");
+}
+
 /** @brief Mencetak satu baris nilai sensor dengan label dan satuan. */
 static void drawSensorLine(uint8_t y, const char* label, float value,
                             const char* unit, SensorStatus status) {
@@ -689,9 +731,18 @@ static void drawMeasurement() {
         drawSensorLine(y, "TDS  :", s_view.tdsCompensated, "ppm", s_view.tdsStatus);
         y += MENU_LINE_HEIGHT;
 
-        // Turbidity
-        drawSensorLine(y, "Turb :", s_view.turbidityFiltered, "NTU",
-                       s_view.turbidityStatus);
+        // Tampilkan input yang dipakai fuzzy, termasuk penanda mode uji.
+        if (s_viewState.useCustomTurbidity) {
+            char turbBuf[32];
+            char turbStr[8];
+            dtostrf(s_viewState.customTurbidity, 4, 1, turbStr);
+            char* pTurb = turbStr; while (*pTurb == ' ') pTurb++;
+            snprintf(turbBuf, sizeof(turbBuf), "Turb : %s NTU UJI", pTurb);
+            g_u8g2.drawStr(2, y, turbBuf);
+        } else {
+            drawSensorLine(y, "Turb :", s_view.turbidityFiltered, "NTU",
+                           s_view.turbidityStatus);
+        }
         y += MENU_LINE_HEIGHT;
 
         // Skor + badge (skor 0.00 - 1.00)
@@ -831,7 +882,11 @@ static void drawTurbidityMonitor() {
     uint8_t y = MENU_FIRST_LINE_Y;
     char lineBuf[32];
 
-    snprintf(lineBuf, sizeof(lineBuf), "ADC   : %.1f", s_view.turbidityAdcFiltered);
+    // Hindari format float pada snprintf; pada build STM32 ini dapat tidak tersedia.
+    char adcStr[8];
+    dtostrf(s_view.turbidityAdcFiltered, 5, 1, adcStr);
+    char* pAdc = adcStr; while (*pAdc == ' ') pAdc++;
+    snprintf(lineBuf, sizeof(lineBuf), "ADC   : %s", pAdc);
     g_u8g2.drawStr(2, y, lineBuf); y += MENU_LINE_HEIGHT;
 
     char vStr[8];
@@ -979,10 +1034,19 @@ static void drawSettings() {
     display_drawHeader("Pengaturan");
     g_u8g2.setFont(u8g2_font_6x10_tf);
 
+    const uint8_t itemCount = s_viewState.fuzzyTestMenuUnlocked
+                                  ? SETTINGS_ITEM_COUNT_UNLOCKED
+                                  : SETTINGS_ITEM_COUNT;
+    uint8_t firstVisible = 0;
+    if (s_viewState.cursorIndex >= MENU_VISIBLE_ROWS) {
+        firstVisible = s_viewState.cursorIndex - (MENU_VISIBLE_ROWS - 1);
+    }
+
     char valueBuf[8];
-    for (uint8_t i = 0; i < SETTINGS_ITEM_COUNT; i++) {
-        uint8_t y = MENU_FIRST_LINE_Y + static_cast<uint8_t>(i * MENU_LINE_HEIGHT);
-        if (y > MENU_LAST_LINE_Y) break;
+    for (uint8_t i = firstVisible; i < itemCount; i++) {
+        uint8_t row = i - firstVisible;
+        if (row >= MENU_VISIBLE_ROWS) break;
+        uint8_t y = MENU_FIRST_LINE_Y + static_cast<uint8_t>(row * MENU_LINE_HEIGHT);
 
         if (i == s_viewState.cursorIndex) {
             g_u8g2.drawStr(2, y, s_viewState.settingsAdjustMode ? "*" : ">");
@@ -997,6 +1061,9 @@ static void drawSettings() {
             g_u8g2.drawStr(100, y, valueBuf);
         }
     }
+    if (firstVisible > 0) g_u8g2.drawStr(121, MENU_FIRST_LINE_Y, "^");
+    if (itemCount > firstVisible + MENU_VISIBLE_ROWS)
+        g_u8g2.drawStr(121, MENU_LAST_LINE_Y, "v");
     display_drawStatusBar(s_viewState.calibSaving ? "Menyimpan..." : "OK:Pilih", "BACK:Menu");
 }
 
@@ -1072,6 +1139,8 @@ static DrawFn s_drawTable[static_cast<uint8_t>(MenuState::COUNT)] = {
     drawSplash,                         // SPLASH
     drawHome,                           // HOME
     drawAmbientTemperatureInput,        // INPUT_AMBIENT_TEMPERATURE
+    drawTurbiditySourceMenu,            // TURBIDITY_SOURCE_MENU
+    drawCustomTurbidityInput,           // INPUT_CUSTOM_TURBIDITY
     drawWaitingSampling,                // WAITING_SAMPLING
     drawMeasurement,                    // MEASUREMENT
     drawCalibration,                    // CALIBRATION
@@ -1120,6 +1189,9 @@ void gui_init() {
     g_systemState.aboutSubPage = 0;
     g_systemState.settingsAdjustMode = false;
     g_systemState.calibSaving = false;
+    g_systemState.fuzzyTestMenuUnlocked = false;
+    g_systemState.useCustomTurbidity = false;
+    g_systemState.fuzzyTestUnlockProgress = 0;
     g_systemState.displayDirty = true;
 }
 
@@ -1190,13 +1262,63 @@ void gui_update(const ButtonEventMsg& msg) {
                                                              AMBIENT_TEMP_MIN, AMBIENT_TEMP_MAX);
                 g_systemState.displayDirty = true;
             } else if (isActivate && msg.id == ButtonID::OK) {
+                if (g_systemState.fuzzyTestMenuUnlocked) {
+                    transitionToLocked(MenuState::TURBIDITY_SOURCE_MENU);
+                } else {
+                    g_systemState.useCustomTurbidity = false;
+                    s_samplingStartTick = millis();
+                    s_stabilitySampleTick = 0;
+                    g_systemState.stabilizationCount = 0;
+                    g_systemState.stabilizationTimedOut = false;
+                    transitionToLocked(MenuState::WAITING_SAMPLING);
+                }
+            } else if (isActivate && msg.id == ButtonID::BACK) {
+                transitionToLocked(MenuState::HOME);
+            }
+            break;
+
+        case MenuState::TURBIDITY_SOURCE_MENU: {
+            const uint8_t sourceCount = g_systemState.fuzzyTestMenuUnlocked
+                                            ? TURBIDITY_SOURCE_ITEM_COUNT : 1;
+            if (isRepeatable && msg.id == ButtonID::UP)
+                moveCursorLocked(false, sourceCount);
+            else if (isRepeatable && msg.id == ButtonID::DOWN)
+                moveCursorLocked(true, sourceCount);
+            else if (isActivate && msg.id == ButtonID::OK) {
+                if (g_systemState.cursorIndex == 0) {
+                    g_systemState.useCustomTurbidity = false;
+                    s_samplingStartTick = millis();
+                    s_stabilitySampleTick = 0;
+                    g_systemState.stabilizationCount = 0;
+                    g_systemState.stabilizationTimedOut = false;
+                    transitionToLocked(MenuState::WAITING_SAMPLING);
+                } else if (g_systemState.fuzzyTestMenuUnlocked) {
+                    transitionToLocked(MenuState::INPUT_CUSTOM_TURBIDITY);
+                }
+            } else if (isActivate && msg.id == ButtonID::BACK) {
+                transitionToLocked(MenuState::INPUT_AMBIENT_TEMPERATURE);
+            }
+            break;
+        }
+
+        case MenuState::INPUT_CUSTOM_TURBIDITY:
+            if (isRepeatable && (msg.id == ButtonID::UP || msg.id == ButtonID::DOWN ||
+                                 msg.id == ButtonID::LEFT || msg.id == ButtonID::RIGHT)) {
+                float step = (msg.id == ButtonID::UP || msg.id == ButtonID::DOWN)
+                                 ? TURBIDITY_CUSTOM_FINE_STEP : TURBIDITY_CUSTOM_COARSE_STEP;
+                if (msg.id == ButtonID::DOWN || msg.id == ButtonID::LEFT) step = -step;
+                g_systemState.customTurbidity = constrain(g_systemState.customTurbidity + step,
+                                                          TURBIDITY_CUSTOM_MIN, TURBIDITY_CUSTOM_MAX);
+                g_systemState.displayDirty = true;
+            } else if (isActivate && msg.id == ButtonID::OK) {
+                g_systemState.useCustomTurbidity = true;
                 s_samplingStartTick = millis();
                 s_stabilitySampleTick = 0;
                 g_systemState.stabilizationCount = 0;
                 g_systemState.stabilizationTimedOut = false;
                 transitionToLocked(MenuState::WAITING_SAMPLING);
             } else if (isActivate && msg.id == ButtonID::BACK) {
-                transitionToLocked(MenuState::HOME);
+                transitionToLocked(MenuState::TURBIDITY_SOURCE_MENU);
             }
             break;
 
@@ -1363,10 +1485,13 @@ void gui_update(const ButtonEventMsg& msg) {
 
         case MenuState::SETTINGS:
             if (!g_systemState.settingsAdjustMode) {
+                const uint8_t settingsCount = g_systemState.fuzzyTestMenuUnlocked
+                                                  ? SETTINGS_ITEM_COUNT_UNLOCKED
+                                                  : SETTINGS_ITEM_COUNT;
                 if (isRepeatable && msg.id == ButtonID::UP)
-                    moveCursorLocked(false, SETTINGS_ITEM_COUNT);
+                    moveCursorLocked(false, settingsCount);
                 else if (isRepeatable && msg.id == ButtonID::DOWN)
-                    moveCursorLocked(true, SETTINGS_ITEM_COUNT);
+                    moveCursorLocked(true, settingsCount);
                 else if (isActivate && msg.id == ButtonID::OK) {
                     if (g_systemState.cursorIndex == SETTINGS_IDX_BRIGHTNESS ||
                         g_systemState.cursorIndex == SETTINGS_IDX_CONTRAST) {
@@ -1382,6 +1507,8 @@ void gui_update(const ButtonEventMsg& msg) {
                         g_systemState.displayDirty = true;
                     } else if (g_systemState.cursorIndex == SETTINGS_IDX_INFO) {
                         transitionToLocked(MenuState::ABOUT);
+                    } else if (g_systemState.cursorIndex == SETTINGS_IDX_FUZZY_TEST) {
+                        transitionToLocked(MenuState::TURBIDITY_SOURCE_MENU);
                     }
                 } else if (isActivate && msg.id == ButtonID::BACK) {
                     transitionToLocked(MenuState::HOME);
@@ -1413,9 +1540,29 @@ void gui_update(const ButtonEventMsg& msg) {
             break;
 
         case MenuState::ABOUT:
+            if (g_systemState.aboutSubPage == 1 && isActivate) {
+                const uint8_t progress = g_systemState.fuzzyTestUnlockProgress;
+                if (msg.id == FUZZY_TEST_UNLOCK_SEQUENCE[progress]) {
+                    g_systemState.fuzzyTestUnlockProgress++;
+                    if (g_systemState.fuzzyTestUnlockProgress == FUZZY_TEST_UNLOCK_LENGTH) {
+                        g_systemState.fuzzyTestMenuUnlocked =
+                            !g_systemState.fuzzyTestMenuUnlocked;
+                        if (!g_systemState.fuzzyTestMenuUnlocked) {
+                            g_systemState.useCustomTurbidity = false;
+                        }
+                        g_systemState.fuzzyTestUnlockProgress = 0;
+                        transitionToLocked(MenuState::SETTINGS);
+                    }
+                } else {
+                    g_systemState.fuzzyTestUnlockProgress =
+                        (msg.id == FUZZY_TEST_UNLOCK_SEQUENCE[0]) ? 1 : 0;
+                }
+                if (g_systemState.currentMenu == MenuState::SETTINGS) break;
+            }
             if (isActivate && (msg.id == ButtonID::DOWN || msg.id == ButtonID::OK)) {
                 if (g_systemState.aboutSubPage == 0) {
                     g_systemState.aboutSubPage = 1;
+                    g_systemState.fuzzyTestUnlockProgress = 0;
                     g_systemState.displayDirty = true;
                 }
             } else if (isActivate && msg.id == ButtonID::UP) {
@@ -1424,6 +1571,7 @@ void gui_update(const ButtonEventMsg& msg) {
                     g_systemState.displayDirty = true;
                 }
             } else if (isActivate && msg.id == ButtonID::BACK) {
+                g_systemState.fuzzyTestUnlockProgress = 0;
                 transitionToLocked(g_systemState.previousMenu);
             }
             break;

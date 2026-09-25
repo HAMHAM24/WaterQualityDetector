@@ -11,6 +11,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define FUZZY_PEMANDIAN_SUHU_MIN 16.0f
+#define FUZZY_PEMANDIAN_SUHU_MAX 35.0f
+#define FUZZY_PEMANDIAN_TURB_MAX 0.5f
+
 /* ---------- ENUM STATUS OUTPUT KUALITAS AIR (4 LEVEL) ------------------- */
 typedef enum {
     STATUS_SANGAT_LAYAK = 0,    /* z = 1.00 */
@@ -96,7 +100,6 @@ const char* FuzzyKualitasAir_GetStatusBadge(KualitasAir_t status);
  */
 const char* FuzzyKualitasAir_GetStatusSuhuStr(StatusSuhu_t status);
 
-float         FuzzyKualitasAir_KompensasiTDS(float tds_raw, float suhu_aktual);
 StatusSuhu_t  FuzzyKualitasAir_CekStatusSuhu(float deltaSuhu, const FuzzyProfil_t* profil);
 
 #ifdef __cplusplus

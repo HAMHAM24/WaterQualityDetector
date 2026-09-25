@@ -63,6 +63,8 @@ enum class MenuState : uint8_t {
     SPLASH,
     HOME,
     INPUT_AMBIENT_TEMPERATURE,
+    TURBIDITY_SOURCE_MENU,
+    INPUT_CUSTOM_TURBIDITY,
     WAITING_SAMPLING,
     MEASUREMENT,
     CALIBRATION,
@@ -146,6 +148,7 @@ struct SystemState {
     uint8_t measurementSubPage;       // 0 = Data Sensor + Skor, 1 = Detail Fuzzy & Rekomendasi
     uint8_t aboutSubPage;             // 0 = Firmware & Sistem, 1 = Hardware & Memori
     float ambientTemperature;         // Suhu udara manual untuk evaluasi Delta T
+    float customTurbidity;            // Nilai NTU manual untuk uji fuzzy, tidak persisten
     float temperatureDelta;           // |suhu air - suhu udara| dalam C
     uint8_t stabilizationCount;       // Jumlah pembacaan suhu stabil berurutan
     bool stabilizationTimedOut;       // Menunggu keputusan manual setelah timeout
@@ -157,6 +160,9 @@ struct SystemState {
     uint8_t settingsBrightness;       // 10-255
     uint8_t settingsContrast;         // 10-255
     bool settingsAdjustMode;          // true = LEFT/RIGHT mengubah nilai setting
+    bool fuzzyTestMenuUnlocked;       // Dibuka sementara lewat urutan tombol pada halaman hardware
+    bool useCustomTurbidity;          // true = fuzzy menggunakan customTurbidity, bukan sensor
+    uint8_t fuzzyTestUnlockProgress;  // Kemajuan urutan akses menu uji tersembunyi
 
     bool systemOK;                    // status kesehatan sistem keseluruhan
     bool displayDirty;                // true jika OLED perlu digambar ulang

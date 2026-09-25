@@ -45,7 +45,7 @@ static const char* pinName(ButtonID id) {
     switch (id) {
         case ButtonID::UP:    return "PB14";
         case ButtonID::DOWN:  return "PA8";
-        case ButtonID::LEFT:  return "PB15";
+        case ButtonID::LEFT:  return "PB0";
         case ButtonID::RIGHT: return "PB13";
         case ButtonID::OK:    return "PB12";
         case ButtonID::BACK:  return "PB11";
